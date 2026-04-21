@@ -1,0 +1,96 @@
+{
+  "theme": "light",
+  "archetype": "1_organic_earthy",
+  "direction": "rtl",
+  "typography": {
+    "primary_font": "Tajawal",
+    "secondary_font": "Cairo",
+    "heading_strategy": "font-tajawal tracking-tight text-foreground font-bold",
+    "body_strategy": "font-cairo text-muted-foreground leading-relaxed font-medium"
+  },
+  "colors": {
+    "description": "Warm, organic, and elegant palette suitable for a premium beauty salon. Avoids harsh blacks and pure whites in backgrounds.",
+    "tailwind_css_variables": {
+      "--background": "40 33% 97%",
+      "--foreground": "25 12% 11%",
+      "--card": "0 0% 100%",
+      "--card-foreground": "25 12% 11%",
+      "--popover": "0 0% 100%",
+      "--popover-foreground": "25 12% 11%",
+      "--primary": "22 31% 48%",
+      "--primary-foreground": "0 0% 100%",
+      "--secondary": "36 29% 94%",
+      "--secondary-foreground": "27 14% 20%",
+      "--muted": "36 29% 94%",
+      "--muted-foreground": "28 10% 38%",
+      "--accent": "29 37% 66%",
+      "--accent-foreground": "0 0% 100%",
+      "--destructive": "0 34% 53%",
+      "--destructive-foreground": "0 0% 100%",
+      "--border": "34 23% 88%",
+      "--input": "34 23% 88%",
+      "--ring": "22 31% 48%",
+      "--radius": "0.75rem"
+    }
+  },
+  "layout_patterns": {
+    "dashboard": "Bento grid mode B 'Control Room' grid: grid-cols-1 md:grid-cols-4 gap-6. Summary metrics span 1, Main charts span 2 or 3. Ensure all elements stretch to match neighbors.",
+    "pos": "Split layout for Point of Sale: Since it's RTL, place the product/services grid on the RIGHT (2/3 width) and the receipt/cart sidebar on the LEFT (1/3 width). Ensure fixed height with internal scrolling for the product grid.",
+    "cards": "Flat solid surfaces. Use rounded-xl or rounded-2xl. Use subtle ambient shadows (shadow-sm) and 1px borders using the --border variable.",
+    "header": "Sticky top, solid white background with a bottom border. Include user profile, notification bell, and a clear brand title. RTL layout (logo right, user left)."
+  },
+  "components": {
+    "buttons": "rounded-xl font-tajawal font-bold transition-all duration-200. Primary: bg-primary text-primary-foreground hover:opacity-90. Secondary: bg-secondary text-secondary-foreground hover:bg-border.",
+    "inputs": "rounded-lg border-input bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all",
+    "tables": "Clean, cardless or contained within a white card. Generous row padding (py-4), text-right for RTL. Use muted text for headers.",
+    "tabs": "Pill-style or clean underline. Override default shadcn grey box; use --secondary color for the tab list background.",
+    "sidebar": "Right-side navigation for RTL. Use white background with subtle left border. Active links should use primary color with a light primary background tint (e.g., bg-primary/10)."
+  },
+  "visual_enhancers": {
+    "borders": "1px solid hsl(var(--border))",
+    "shadows": "Ambient subtle shadows: shadow-[0_4px_20px_rgba(31,27,24,0.04)]",
+    "icons": "lucide-react. Use stroke-width 1.5. Match with muted-foreground for inactive, primary for active.",
+    "glassmorphism": "Not recommended for accounting/POS. Stick to solid surfaces for data clarity and legibility."
+  },
+  "motion": {
+    "hover": "Translate-y-[-2px] and slightly elevated shadow for interactive dashboard cards and POS products.",
+    "page_transitions": "Subtle fade in.",
+    "list_stagger": "Stagger children opacity and y-offset for lists (invoices, services)."
+  },
+  "media": {
+    "image_urls": {
+      "login_background": {
+        "url": "https://images.pexels.com/photos/13068357/pexels-photo-13068357.jpeg",
+        "description": "Sleek beauty salon interior with contemporary furniture and lighting design.",
+        "usage": "Background image for the login screen. Apply a dark or light overlay to ensure the login card stands out."
+      },
+      "avatar_female": {
+        "url": "https://images.pexels.com/photos/36363694/pexels-photo-36363694.jpeg",
+        "description": "Professional portrait of a confident business woman.",
+        "usage": "Default user avatar for the logged-in admin, manager, or cashier."
+      },
+      "product_placeholder_1": {
+        "url": "https://images.pexels.com/photos/29611529/pexels-photo-29611529.jpeg",
+        "description": "Elegant skincare products with gold accents.",
+        "usage": "Thumbnail image for retail beauty products in the POS and inventory."
+      },
+      "product_placeholder_2": {
+        "url": "https://images.unsplash.com/photo-1694101395622-65100ea10a0c",
+        "description": "Premium cosmetic bottle on white.",
+        "usage": "Thumbnail for another beauty product/service in POS."
+      }
+    }
+  },
+  "instructions_to_main_agent": [
+    "Implement the entire UI in RTL (Right-to-Left) with dir='rtl' on the root HTML. The primary language is Arabic.",
+    "Use EUR (€) for all currency formatting across the app (dashboard, POS, invoices, reports).",
+    "Add Google Fonts 'Tajawal' (Headings) and 'Cairo' (Body) to the index.html or import them in CSS.",
+    "All interactive elements (buttons, inputs, menu items, table rows) MUST include 'data-testid' attributes (e.g., data-testid='login-submit-button').",
+    "Set up routing for the following views: Login, Dashboard, POS (Sales), Appointments (Calendar), Products/Inventory, Services, Customers (CRM), Invoices, and Financial Reports.",
+    "For the POS interface: Ensure a split view. As it's RTL, place the product/services selection grid on the right, and the active cart/invoice summary sidebar on the left.",
+    "Use Recharts for the revenue/profit charts on the dashboard. Use custom tooltips styled with the primary color.",
+    "Apply Tailwind configuration with the custom CSS variables defined in this guideline.",
+    "Customize Shadcn components heavily to remove the 'default Vercel look'. Use rounded-xl for cards, warm border colors, and generous spacing.",
+    "Ensure high contrast for data tables and invoice print views."
+  ]
+}
