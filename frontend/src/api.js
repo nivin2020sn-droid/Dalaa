@@ -44,10 +44,11 @@ export const fmtEUR = (n) => {
   }).format(v);
 };
 
-export const fmtDate = (iso) => {
+export const fmtDate = (iso, lang) => {
   if (!iso) return "";
+  const locale = lang === "de" ? "de-DE" : "ar-EG";
   try {
-    return new Date(iso).toLocaleString("ar-EG", {
+    return new Date(iso).toLocaleString(locale, {
       year: "numeric", month: "short", day: "numeric",
       hour: "2-digit", minute: "2-digit",
     });

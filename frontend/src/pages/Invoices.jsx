@@ -93,7 +93,7 @@ export default function Invoices() {
                     {inv.invoice_number}
                   </TableCell>
                   <TableCell>{inv.customer_name}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{fmtDate(inv.created_at)}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{fmtDate(inv.created_at, lang)}</TableCell>
                   <TableCell>{renderStatus(inv)}</TableCell>
                   <TableCell className={`font-bold ${inv.total < 0 ? "text-rose-600" : "text-primary"}`}>
                     {fmtEUR(inv.total)}

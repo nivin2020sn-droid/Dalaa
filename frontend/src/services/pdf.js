@@ -32,25 +32,34 @@ export async function exportInvoiceToPdf(domNode, filename) {
 
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 10;
+  const margin = 8;
+  const usableWidth = pageWidth - margin * 2;
+  const usableHeight = pageHeight - margin * 2;
 
   const imgProps = pdf.getImageProperties(imgData);
-  const imgWidth = pageWidth - margin * 2;
-  const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+  let imgWidth = usableWidth;
+  let imgHeight = (imgProps.height * imgWidth) / imgProps.width;
 
-  if (imgHeight <= pageHeight - margin * 2) {
+  if (imgHeight <= usableHeight) {
+    // Fits on a single page as-is
     pdf.addImage(imgData, "PNG", margin, margin, imgWidth, imgHeight);
+  } else if (imgHeight <= usableHeight * 1.6) {
+    // Slight overflow: shrink proportionally so the whole invoice fits on one page.
+    imgHeight = usableHeight;
+    imgWidth = (imgProps.width * imgHeight) / imgProps.height;
+    const xOff = (pageWidth - imgWidth) / 2;
+    pdf.addImage(imgData, "PNG", xOff, margin, imgWidth, imgHeight);
   } else {
-    // Multi-page support for very long invoices
+    // Long invoice: split across multiple pages
     let heightLeft = imgHeight;
     let position = margin;
     pdf.addImage(imgData, "PNG", margin, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight - margin * 2;
+    heightLeft -= usableHeight;
     while (heightLeft > 0) {
       position = heightLeft - imgHeight + margin;
       pdf.addPage();
       pdf.addImage(imgData, "PNG", margin, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight - margin * 2;
+      heightLeft -= usableHeight;
     }
   }
 

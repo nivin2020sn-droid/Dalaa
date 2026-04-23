@@ -128,8 +128,11 @@ code {
 @media print {
     body * { visibility: hidden; }
     .print-area, .print-area * { visibility: visible; }
-    .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+    .print-area { position: absolute; left: 0; top: 0; width: 100%; max-width: 100% !important; box-shadow: none !important; }
     .no-print { display: none !important; }
+    @page { size: A4; margin: 8mm; }
+    .invoice-compact { padding: 8mm !important; font-size: 11px !important; }
+    .invoice-compact * { box-shadow: none !important; }
 }
 
 /* Calendar overrides for RTL */
