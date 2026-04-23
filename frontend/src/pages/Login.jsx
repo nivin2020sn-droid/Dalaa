@@ -2,15 +2,17 @@ import { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../context/SettingsContext";
+import { useI18n } from "../i18n/I18nContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Languages } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Login() {
   const { user, login } = useAuth();
   const { settings } = useSettings();
+  const { t, lang, setLang } = useI18n();
   const navigate = useNavigate();
   const [email, setEmail] = useState("admin@salon.com");
   const [password, setPassword] = useState("admin123");
@@ -23,10 +25,10 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
-      toast.success("أهلاً بك!");
+      toast.success(lang === "de" ? "Willkommen!" : "أهلاً بك!");
       navigate("/dashboard");
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "خطأ في تسجيل الدخول");
+      toast.error(err?.response?.data?.detail || t("auth.invalid"));
     } finally {
       setLoading(false);
     }
@@ -58,12 +60,12 @@ export default function Login() {
           </div>
         </div>
 
-        <h1 className="font-heading text-3xl font-bold mb-2">مرحباً بعودتك</h1>
-        <p className="text-muted-foreground mb-8">سجّل دخولك للمتابعة إلى لوحة التحكم</p>
+        <h1 className="font-heading text-3xl font-bold mb-2">{t("auth.welcome")}</h1>
+        <p className="text-muted-foreground mb-8">{t("auth.subtitle")}</p>
 
         <form onSubmit={handleSubmit} className="space-y-4" data-testid="login-form">
           <div>
-            <Label htmlFor="email" className="text-sm mb-2 block">البريد الإلكتروني</Label>
+            <Label htmlFor="email" className="text-sm mb-2 block">{t("common.email")}</Label>
             <Input
               id="email"
               type="email"
@@ -75,7 +77,7 @@ export default function Login() {
             />
           </div>
           <div>
-            <Label htmlFor="password" className="text-sm mb-2 block">كلمة المرور</Label>
+            <Label htmlFor="password" className="text-sm mb-2 block">{lang === "de" ? "Passwort" : "كلمة المرور"}</Label>
             <Input
               id="password"
               type="password"
@@ -92,12 +94,17 @@ export default function Login() {
             disabled={loading}
             data-testid="login-submit-button"
           >
-            {loading ? "جاري..." : "تسجيل الدخول"}
+            {loading ? t("auth.logging_in") : t("auth.login")}
           </Button>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-border text-center text-xs text-muted-foreground">
-          الحساب الافتراضي: <span className="font-mono">admin@salon.com</span> / <span className="font-mono">admin123</span>
+        <div className="mt-6 pt-6 border-t border-border flex items-center justify-between gap-3 text-xs">
+          <span className="text-muted-foreground">
+            {t("auth.default_hint")}: <span className="font-mono">admin@salon.com</span> / <span className="font-mono">admin123</span>
+          </span>
+          <Button type="button" variant="ghost" size="sm" className="shrink-0 h-9" onClick={() => setLang(lang === "ar" ? "de" : "ar")} data-testid="login-lang-toggle">
+            <Languages size={14} className="mx-1" /> {lang === "ar" ? "DE" : "AR"}
+          </Button>
         </div>
       </div>
     </div>

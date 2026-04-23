@@ -57,7 +57,7 @@ export default function Settings() {
       await reload();
       toast.success("تم حفظ الإعدادات");
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "خطأ في الحفظ");
+      toast.error(e?.response?.data?.detail || (lang === "de" ? "Fehler beim Speichern" : "خطأ في الحفظ"));
     } finally {
       setSaving(false);
     }
@@ -219,7 +219,7 @@ export default function Settings() {
 
       <div className="flex justify-end">
         <Button onClick={save} disabled={saving || !isAdmin} className="px-8 h-11" data-testid="save-settings-button">
-          {saving ? "جاري الحفظ..." : "حفظ التغييرات"}
+          {saving ? t("set.saving") : t("set.save_changes")}
         </Button>
       </div>
 
@@ -256,7 +256,7 @@ export default function Settings() {
           >
             <CloudUpload size={20} className="shrink-0 text-primary" />
             <div className="text-right">
-              <div className="font-bold text-sm">{exporting ? "جاري..." : "حفظ نسخة احتياطية"}</div>
+              <div className="font-bold text-sm">{exporting ? t("common.loading") : t("backup.export")}</div>
               <div className="text-xs text-muted-foreground">JSON → Drive / Dropbox / Email</div>
             </div>
           </Button>
@@ -330,7 +330,7 @@ export default function Settings() {
               className="bg-destructive hover:bg-destructive/90"
               data-testid="restore-confirm-button"
             >
-              {restoring ? "جاري الاستعادة..." : "نعم، استبدل البيانات"}
+              {restoring ? t("common.loading") : (lang === "de" ? "Ja, Daten ersetzen" : "نعم، استبدل البيانات")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

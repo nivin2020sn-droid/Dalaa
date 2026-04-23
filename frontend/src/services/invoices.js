@@ -22,16 +22,16 @@ async function writeAudit(action, entity, payload = {}) {
 
 /**
  * Compute VAT breakdown on invoice items. Each item carries vat_rate.
- * Prices stored on products/services are treated as GROSS (incl. VAT) —
- * matches typical salon POS behaviour in Germany.
+ * Prices stored on products/services are treated as NET (excl. VAT) —
+ * the user enters the net price and VAT is added automatically on top.
  */
 function computeVat(items) {
   const byRate = {};
   for (const it of items) {
     const rate = Number(it.vat_rate ?? 19);
-    const gross = Number(it.total || 0);
-    const net = gross / (1 + rate / 100);
-    const vat = gross - net;
+    const net = Number(it.net_total ?? 0);
+    const vat = net * (rate / 100);
+    const gross = net + vat;
     byRate[rate] = byRate[rate] || { rate, net: 0, vat: 0, gross: 0 };
     byRate[rate].net += net;
     byRate[rate].vat += vat;
@@ -45,10 +45,12 @@ function computeVat(items) {
   }));
   const net_total = breakdown.reduce((s, b) => s + b.net, 0);
   const vat_total = breakdown.reduce((s, b) => s + b.vat, 0);
+  const gross_total = breakdown.reduce((s, b) => s + b.gross, 0);
   return {
     breakdown,
     net_total: Math.round(net_total * 100) / 100,
     vat_total: Math.round(vat_total * 100) / 100,
+    gross_total: Math.round(gross_total * 100) / 100,
   };
 }
 
@@ -70,7 +72,8 @@ export async function getInvoice(id) {
 export async function createInvoice(body) {
   const user = await currentUser();
 
-  // Enrich items with their VAT rate at time of sale (snapshot, legally important)
+  // Enrich items with their VAT rate at time of sale (snapshot, legally important).
+  // Prices are NET. VAT is computed and added automatically.
   const items = [];
   for (const it of body.items || []) {
     let vat_rate = it.vat_rate;
@@ -83,22 +86,29 @@ export async function createInvoice(body) {
         vat_rate = s?.vat_rate ?? 19;
       }
     }
+    const qty = Number(it.quantity || 0);
+    const unit_price = Number(it.unit_price || 0); // NET unit price
+    const net_line = Math.round(qty * unit_price * 100) / 100;
+    const vat_line = Math.round(net_line * (Number(vat_rate) / 100) * 100) / 100;
+    const gross_line = Math.round((net_line + vat_line) * 100) / 100;
     items.push({
       item_id: it.item_id,
       item_type: it.item_type,
       name: it.name,
-      quantity: Number(it.quantity || 0),
-      unit_price: Number(it.unit_price || 0),
-      total: Number(it.total || 0),
+      quantity: qty,
+      unit_price,            // NET per unit
+      net_total: net_line,   // line net
+      vat_total: vat_line,   // line vat
+      total: gross_line,     // line gross (what customer pays for this line)
       vat_rate: Number(vat_rate),
     });
   }
 
-  const subtotal = items.reduce((s, it) => s + it.total, 0);
-  const discount = Number(body.discount || 0);
-  const extra_tax = Number(body.tax || 0); // optional extra manual tax
-  const total = Math.max(0, subtotal - discount + extra_tax);
   const vat = computeVat(items);
+  const discount = Number(body.discount || 0);
+  const extra_tax = Number(body.tax || 0); // optional extra manual fee
+  const gross = vat.gross_total;
+  const total = Math.max(0, Math.round((gross - discount + extra_tax) * 100) / 100);
 
   const inv = {
     id: newId(),
@@ -106,10 +116,10 @@ export async function createInvoice(body) {
     customer_id: body.customer_id || "",
     customer_name: body.customer_name || "عميل عابر",
     items,
-    subtotal,
+    subtotal: gross,          // gross subtotal (line items)
     discount,
     tax: extra_tax,
-    total,
+    total,                     // final total after discount
     net_total: vat.net_total,
     vat_total: vat.vat_total,
     vat_breakdown: vat.breakdown,
@@ -132,7 +142,7 @@ export async function createInvoice(body) {
     }
   }
 
-  // Update customer stats
+  // Update customer stats (uses gross total)
   if (inv.customer_id) {
     const c = await db.customers.get(inv.customer_id);
     if (c) {
