@@ -11,8 +11,10 @@ import {
   TrendingUp,
   LogOut,
   Sparkles,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useSettings } from "../context/SettingsContext";
 import { Button } from "../components/ui/button";
 
 const NAV = [
@@ -25,16 +27,28 @@ const NAV = [
   { to: "/customers", label: "العملاء", icon: Users, testid: "nav-customers" },
   { to: "/expenses", label: "المصاريف", icon: Wallet, testid: "nav-expenses" },
   { to: "/reports", label: "التقارير", icon: TrendingUp, testid: "nav-reports" },
+  { to: "/settings", label: "الإعدادات", icon: SettingsIcon, testid: "nav-settings" },
 ];
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { settings } = useSettings();
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
+
+  const LogoMark = () => (
+    <div className="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center overflow-hidden">
+      {settings.logo_url ? (
+        <img src={settings.logo_url} alt={settings.shop_name} className="w-full h-full object-cover" />
+      ) : (
+        <Sparkles size={20} strokeWidth={2} />
+      )}
+    </div>
+  );
 
   return (
     <div className="min-h-screen flex bg-background" data-testid="app-layout">
@@ -44,12 +58,10 @@ export default function Layout() {
         data-testid="sidebar"
       >
         <div className="px-6 py-6 border-b border-border flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center">
-            <Sparkles size={20} strokeWidth={2} />
-          </div>
+          <LogoMark />
           <div>
-            <div className="font-heading font-bold text-lg leading-none">صالون</div>
-            <div className="text-xs text-muted-foreground mt-1">نظام المحاسبة</div>
+            <div className="font-heading font-bold text-lg leading-none">{settings.shop_name}</div>
+            <div className="text-xs text-muted-foreground mt-1">{settings.tagline}</div>
           </div>
         </div>
 
@@ -102,10 +114,14 @@ export default function Layout() {
       {/* Mobile top nav */}
       <div className="md:hidden fixed top-0 inset-x-0 bg-white border-b border-border z-40 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
-            <Sparkles size={16} />
+          <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center overflow-hidden">
+            {settings.logo_url ? (
+              <img src={settings.logo_url} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <Sparkles size={16} />
+            )}
           </div>
-          <span className="font-heading font-bold">صالون</span>
+          <span className="font-heading font-bold">{settings.shop_name}</span>
         </div>
         <Button variant="outline" size="sm" onClick={handleLogout} data-testid="logout-button-mobile">
           <LogOut size={14} />

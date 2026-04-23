@@ -118,9 +118,9 @@ export default function Dashboard() {
                 <Line
                   type="monotone"
                   dataKey="revenue"
-                  stroke="hsl(22 31% 48%)"
+                  stroke="hsl(282 44% 47%)"
                   strokeWidth={2.5}
-                  dot={{ fill: "hsl(22 31% 48%)", r: 3 }}
+                  dot={{ fill: "hsl(282 44% 47%)", r: 3 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -137,7 +137,7 @@ export default function Dashboard() {
                   <XAxis type="number" tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11 }} />
                   <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid hsl(34 23% 88%)" }} />
-                  <Bar dataKey="count" fill="hsl(29 37% 66%)" radius={[0, 8, 8, 0]} />
+                  <Bar dataKey="count" fill="hsl(335 72% 68%)" radius={[0, 8, 8, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

@@ -544,6 +544,37 @@ async def dashboard_report(_=Depends(get_current_user)):
     }
 
 
+# ============ SETTINGS ============
+class SettingsModel(BaseModel):
+    shop_name: Optional[str] = "صالون"
+    tagline: Optional[str] = "نظام محاسبة التجميل"
+    logo_url: Optional[str] = ""
+    address: Optional[str] = ""
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    tax_id: Optional[str] = ""
+    receipt_footer: Optional[str] = "شكراً لزيارتكم • نتطلع لرؤيتكم مجدداً"
+
+
+DEFAULT_SETTINGS = SettingsModel().model_dump()
+
+
+@api_router.get("/settings")
+async def get_settings():
+    doc = await db.settings.find_one({"id": "main"}, {"_id": 0, "id": 0})
+    if not doc:
+        return DEFAULT_SETTINGS
+    # fill any missing fields with defaults
+    return {**DEFAULT_SETTINGS, **doc}
+
+
+@api_router.put("/settings")
+async def update_settings(body: SettingsModel, _=Depends(require_admin)):
+    payload = body.model_dump()
+    await db.settings.update_one({"id": "main"}, {"$set": payload}, upsert=True)
+    return payload
+
+
 # ============ SEED ============
 async def seed_admin():
     existing = await db.users.find_one({"email": "admin@salon.com"})

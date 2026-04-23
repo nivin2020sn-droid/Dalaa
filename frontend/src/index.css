@@ -10,8 +10,8 @@ html, body {
     font-family: 'Cairo', 'Tajawal', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: hsl(40 33% 97%);
-    color: hsl(25 12% 11%);
+    background-color: hsl(320 40% 98%);
+    color: hsl(280 20% 15%);
 }
 
 h1, h2, h3, h4, h5, h6, .font-heading {
@@ -25,30 +25,30 @@ code {
 
 @layer base {
     :root {
-        --background: 40 33% 97%;
-        --foreground: 25 12% 11%;
+        --background: 320 40% 98%;
+        --foreground: 280 20% 15%;
         --card: 0 0% 100%;
-        --card-foreground: 25 12% 11%;
+        --card-foreground: 280 20% 15%;
         --popover: 0 0% 100%;
-        --popover-foreground: 25 12% 11%;
-        --primary: 22 31% 48%;
+        --popover-foreground: 280 20% 15%;
+        --primary: 282 44% 47%;
         --primary-foreground: 0 0% 100%;
-        --secondary: 36 29% 94%;
-        --secondary-foreground: 27 14% 20%;
-        --muted: 36 29% 94%;
-        --muted-foreground: 28 10% 38%;
-        --accent: 29 37% 66%;
+        --secondary: 325 45% 95%;
+        --secondary-foreground: 285 30% 25%;
+        --muted: 325 35% 95%;
+        --muted-foreground: 285 12% 42%;
+        --accent: 335 72% 68%;
         --accent-foreground: 0 0% 100%;
-        --destructive: 0 34% 53%;
+        --destructive: 0 72% 55%;
         --destructive-foreground: 0 0% 100%;
-        --border: 34 23% 88%;
-        --input: 34 23% 88%;
-        --ring: 22 31% 48%;
-        --chart-1: 22 31% 48%;
-        --chart-2: 29 37% 66%;
-        --chart-3: 140 25% 45%;
-        --chart-4: 43 74% 56%;
-        --chart-5: 340 40% 55%;
+        --border: 325 30% 90%;
+        --input: 325 30% 90%;
+        --ring: 282 44% 47%;
+        --chart-1: 282 44% 47%;
+        --chart-2: 335 72% 68%;
+        --chart-3: 260 55% 58%;
+        --chart-4: 310 60% 60%;
+        --chart-5: 350 65% 70%;
         --radius: 0.75rem;
     }
 }

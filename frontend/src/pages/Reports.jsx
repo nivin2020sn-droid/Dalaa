@@ -6,7 +6,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 
-const COLORS = ["hsl(22 31% 48%)", "hsl(29 37% 66%)", "hsl(140 25% 45%)", "hsl(43 74% 56%)", "hsl(340 40% 55%)"];
+const COLORS = ["hsl(282 44% 47%)", "hsl(335 72% 68%)", "hsl(260 55% 58%)", "hsl(310 60% 60%)", "hsl(350 65% 70%)"];
 
 export default function Reports() {
   const [data, setData] = useState(null);
@@ -48,7 +48,7 @@ export default function Reports() {
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip formatter={(v) => fmtEUR(v)} contentStyle={{ borderRadius: 12, border: "1px solid hsl(34 23% 88%)" }} />
-                <Bar dataKey="revenue" fill="hsl(22 31% 48%)" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="revenue" fill="hsl(282 44% 47%)" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

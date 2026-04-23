@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useSettings } from "../context/SettingsContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -9,6 +10,7 @@ import { toast } from "sonner";
 
 export default function Login() {
   const { user, login } = useAuth();
+  const { settings } = useSettings();
   const navigate = useNavigate();
   const [email, setEmail] = useState("admin@salon.com");
   const [password, setPassword] = useState("admin123");
@@ -35,7 +37,7 @@ export default function Login() {
       className="min-h-screen flex items-center justify-center p-4 relative"
       style={{
         backgroundImage:
-          "linear-gradient(rgba(40,28,20,0.55), rgba(40,28,20,0.75)), url('https://images.pexels.com/photos/13068357/pexels-photo-13068357.jpeg')",
+          "linear-gradient(rgba(55,20,65,0.6), rgba(90,30,75,0.75)), url('https://images.pexels.com/photos/13068357/pexels-photo-13068357.jpeg')",
         backgroundSize: "cover",
         backgroundPosition: "center",
       }}
@@ -43,12 +45,16 @@ export default function Login() {
     >
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8 md:p-10 card-ambient animate-fadein">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-xl bg-primary text-primary-foreground flex items-center justify-center">
-            <Sparkles size={22} />
+          <div className="w-12 h-12 rounded-xl bg-primary text-primary-foreground flex items-center justify-center overflow-hidden">
+            {settings.logo_url ? (
+              <img src={settings.logo_url} alt={settings.shop_name} className="w-full h-full object-cover" />
+            ) : (
+              <Sparkles size={22} />
+            )}
           </div>
           <div>
-            <div className="font-heading font-bold text-2xl leading-none">صالون</div>
-            <div className="text-sm text-muted-foreground mt-1">نظام محاسبة التجميل</div>
+            <div className="font-heading font-bold text-2xl leading-none">{settings.shop_name}</div>
+            <div className="text-sm text-muted-foreground mt-1">{settings.tagline}</div>
           </div>
         </div>
 
