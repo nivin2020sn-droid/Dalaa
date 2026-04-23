@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Pencil, Trash2, Scissors } from "lucide-react";
 import { toast } from "sonner";
 
-const empty = { name: "", category: "", duration_minutes: 30, price: 0, description: "" };
+const empty = { name: "", category: "", duration_minutes: 30, price: 0, vat_rate: 19, description: "" };
 
 export default function Services() {
   const [items, setItems] = useState([]);
@@ -22,7 +22,7 @@ export default function Services() {
 
   const save = async () => {
     try {
-      const payload = { ...form, duration_minutes: Number(form.duration_minutes || 0), price: Number(form.price || 0) };
+      const payload = { ...form, duration_minutes: Number(form.duration_minutes || 0), price: Number(form.price || 0), vat_rate: Number(form.vat_rate ?? 19) };
       if (editId) await api.put(`/services/${editId}`, payload);
       else await api.post("/services", payload);
       toast.success("تم الحفظ");
@@ -52,6 +52,19 @@ export default function Services() {
               <div><Label>الفئة</Label><Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></div>
               <div><Label>المدة (دقائق)</Label><Input type="number" value={form.duration_minutes} onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })} /></div>
               <div className="col-span-2"><Label>السعر</Label><Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} data-testid="service-price-input" /></div>
+              <div className="col-span-2">
+                <Label>MwSt %</Label>
+                <select
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={form.vat_rate ?? 19}
+                  onChange={(e) => setForm({ ...form, vat_rate: Number(e.target.value) })}
+                  data-testid="service-vat-select"
+                >
+                  <option value={19}>19% (معياري)</option>
+                  <option value={7}>7% (مخفض)</option>
+                  <option value={0}>0% (معفى)</option>
+                </select>
+              </div>
               <div className="col-span-2"><Label>الوصف</Label><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
             </div>
             <Button onClick={save} className="mt-4" data-testid="save-service-button">حفظ</Button>

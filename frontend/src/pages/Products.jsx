@@ -11,7 +11,7 @@ import {
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from "../components/ui/table";
 
-const empty = { name: "", sku: "", category: "", cost_price: 0, sale_price: 0, stock: 0, min_stock: 5, image_url: "" };
+const empty = { name: "", sku: "", category: "", cost_price: 0, sale_price: 0, stock: 0, min_stock: 5, vat_rate: 19, image_url: "" };
 
 export default function Products() {
   const [items, setItems] = useState([]);
@@ -33,6 +33,7 @@ export default function Products() {
         sale_price: Number(form.sale_price || 0),
         stock: Number(form.stock || 0),
         min_stock: Number(form.min_stock || 0),
+        vat_rate: Number(form.vat_rate ?? 19),
       };
       if (editId) await api.put(`/products/${editId}`, payload);
       else await api.post("/products", payload);
@@ -82,6 +83,19 @@ export default function Products() {
               <div><Label>سعر البيع</Label><Input type="number" value={form.sale_price} onChange={(e) => setForm({ ...form, sale_price: e.target.value })} data-testid="product-price-input" /></div>
               <div><Label>المخزون</Label><Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} data-testid="product-stock-input" /></div>
               <div><Label>حد التنبيه</Label><Input type="number" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: e.target.value })} /></div>
+              <div>
+                <Label>MwSt %</Label>
+                <select
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={form.vat_rate ?? 19}
+                  onChange={(e) => setForm({ ...form, vat_rate: Number(e.target.value) })}
+                  data-testid="product-vat-select"
+                >
+                  <option value={19}>19% (معياري)</option>
+                  <option value={7}>7% (مخفض)</option>
+                  <option value={0}>0% (معفى)</option>
+                </select>
+              </div>
               <div className="col-span-2"><Label>رابط الصورة (اختياري)</Label><Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} /></div>
             </div>
             <Button onClick={save} className="mt-4" data-testid="save-product-button">حفظ</Button>

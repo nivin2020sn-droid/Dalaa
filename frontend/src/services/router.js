@@ -33,6 +33,10 @@ async function handlePost(path, body) {
   if (path === "/auth/login") return await auth.login(body);
   if (path === "/auth/register") return await auth.registerUser(body);
   if (path === "/invoices") return await invoices.createInvoice(body);
+
+  const stornoMatch = path.match(/^\/invoices\/(.+)\/storno$/);
+  if (stornoMatch) return await invoices.stornoInvoice(stornoMatch[1]);
+
   for (const key of Object.keys(resourceMap)) {
     if (path === `/${key}`) return await resourceMap[key].create(body);
   }

@@ -2,6 +2,7 @@ import "./App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { SettingsProvider } from "./context/SettingsContext";
+import { I18nProvider } from "./i18n/I18nContext";
 import { Toaster } from "./components/ui/sonner";
 import Login from "./pages/Login";
 import Layout from "./layout/Layout";
@@ -31,8 +32,9 @@ function Protected({ children }) {
 
 function App() {
   return (
-    <AuthProvider>
-      <SettingsProvider>
+    <I18nProvider>
+      <AuthProvider>
+        <SettingsProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -63,6 +65,7 @@ function App() {
         <Toaster position="top-center" richColors />
       </SettingsProvider>
     </AuthProvider>
+    </I18nProvider>
   );
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { api } from "../api";
 import { useSettings } from "../context/SettingsContext";
 import { useAuth } from "../context/AuthContext";
+import { useI18n } from "../i18n/I18nContext";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -11,13 +12,14 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Sparkles, Upload, Trash2, Download, CloudUpload, Database } from "lucide-react";
+import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages } from "lucide-react";
 import { toast } from "sonner";
 import { exportBackup, restoreFromFile } from "../services/backup";
 
 export default function Settings() {
   const { settings, reload } = useSettings();
   const { user } = useAuth();
+  const { t, lang, setLang } = useI18n();
   const [form, setForm] = useState(settings);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
@@ -77,6 +79,36 @@ export default function Settings() {
           لا تملك صلاحية تعديل الإعدادات (يلزم حساب مدير)
         </Card>
       )}
+
+      {/* Language selector */}
+      <Card className="p-6 rounded-2xl card-ambient mb-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-accent/20 text-accent-foreground flex items-center justify-center">
+            <Languages size={20} strokeWidth={1.75} />
+          </div>
+          <h3 className="font-heading font-bold text-lg">{t("set.language")}</h3>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={lang === "ar" ? "default" : "outline"}
+            className="flex-1 h-12"
+            onClick={() => setLang("ar")}
+            data-testid="lang-select-ar"
+          >
+            🇸🇦 العربية
+          </Button>
+          <Button
+            type="button"
+            variant={lang === "de" ? "default" : "outline"}
+            className="flex-1 h-12"
+            onClick={() => setLang("de")}
+            data-testid="lang-select-de"
+          >
+            🇩🇪 Deutsch
+          </Button>
+        </div>
+      </Card>
 
       {/* Logo upload */}
       <Card className="p-6 rounded-2xl card-ambient mb-5">

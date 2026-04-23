@@ -12,33 +12,38 @@ import {
   LogOut,
   Sparkles,
   Settings as SettingsIcon,
+  Languages,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../context/SettingsContext";
+import { useI18n } from "../i18n/I18nContext";
 import { Button } from "../components/ui/button";
 
 const NAV = [
-  { to: "/dashboard", label: "لوحة التحكم", icon: LayoutDashboard, testid: "nav-dashboard" },
-  { to: "/pos", label: "نقطة البيع", icon: ShoppingCart, testid: "nav-pos" },
-  { to: "/appointments", label: "المواعيد", icon: CalendarDays, testid: "nav-appointments" },
-  { to: "/invoices", label: "الفواتير", icon: Receipt, testid: "nav-invoices" },
-  { to: "/products", label: "المنتجات", icon: Package, testid: "nav-products" },
-  { to: "/services", label: "الخدمات", icon: Scissors, testid: "nav-services" },
-  { to: "/customers", label: "العملاء", icon: Users, testid: "nav-customers" },
-  { to: "/expenses", label: "المصاريف", icon: Wallet, testid: "nav-expenses" },
-  { to: "/reports", label: "التقارير", icon: TrendingUp, testid: "nav-reports" },
-  { to: "/settings", label: "الإعدادات", icon: SettingsIcon, testid: "nav-settings" },
+  { to: "/dashboard", tk: "nav.dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
+  { to: "/pos", tk: "nav.pos", icon: ShoppingCart, testid: "nav-pos" },
+  { to: "/appointments", tk: "nav.appointments", icon: CalendarDays, testid: "nav-appointments" },
+  { to: "/invoices", tk: "nav.invoices", icon: Receipt, testid: "nav-invoices" },
+  { to: "/products", tk: "nav.products", icon: Package, testid: "nav-products" },
+  { to: "/services", tk: "nav.services", icon: Scissors, testid: "nav-services" },
+  { to: "/customers", tk: "nav.customers", icon: Users, testid: "nav-customers" },
+  { to: "/expenses", tk: "nav.expenses", icon: Wallet, testid: "nav-expenses" },
+  { to: "/reports", tk: "nav.reports", icon: TrendingUp, testid: "nav-reports" },
+  { to: "/settings", tk: "nav.settings", icon: SettingsIcon, testid: "nav-settings" },
 ];
 
 export default function Layout() {
   const { user, logout } = useAuth();
   const { settings } = useSettings();
+  const { t, lang, setLang, dir } = useI18n();
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
+
+  const toggleLang = () => setLang(lang === "ar" ? "de" : "ar");
 
   const LogoMark = () => (
     <div className="w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center overflow-hidden">
@@ -52,9 +57,9 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex bg-background" data-testid="app-layout">
-      {/* Sidebar (right for RTL) */}
+      {/* Sidebar (right for RTL, left for LTR) */}
       <aside
-        className="w-64 bg-white border-l border-border hidden md:flex flex-col sticky top-0 h-screen"
+        className={`w-64 bg-white hidden md:flex flex-col sticky top-0 h-screen ${dir === "rtl" ? "border-l" : "border-r"} border-border`}
         data-testid="sidebar"
       >
         <div className="px-6 py-6 border-b border-border flex items-center gap-3">
@@ -74,7 +79,7 @@ export default function Layout() {
                 to={item.to}
                 data-testid={item.testid}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  `flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all min-h-[44px] ${
                     isActive
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -82,31 +87,40 @@ export default function Layout() {
                 }
               >
                 <Icon size={18} strokeWidth={1.5} />
-                <span>{item.label}</span>
+                <span>{t(item.tk)}</span>
               </NavLink>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3 mb-3 px-2">
+        <div className="p-4 border-t border-border space-y-2">
+          <div className="flex items-center gap-3 mb-2 px-2">
             <div className="w-9 h-9 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold">
               {user?.name?.[0] || "م"}
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold truncate">{user?.name}</div>
               <div className="text-xs text-muted-foreground">
-                {user?.role === "admin" ? "مدير" : "كاشير"}
+                {user?.role === "admin" ? t("auth.admin") : t("auth.cashier")}
               </div>
             </div>
           </div>
           <Button
             variant="outline"
-            className="w-full"
+            className="w-full h-11"
+            onClick={toggleLang}
+            data-testid="lang-toggle-button"
+          >
+            <Languages size={16} className="mx-2" />
+            {lang === "ar" ? "Deutsch" : "العربية"}
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full h-11"
             onClick={handleLogout}
             data-testid="logout-button"
           >
-            <LogOut size={16} className="ml-2" /> خروج
+            <LogOut size={16} className="mx-2" /> {t("nav.logout")}
           </Button>
         </div>
       </aside>
@@ -123,9 +137,14 @@ export default function Layout() {
           </div>
           <span className="font-heading font-bold">{settings.shop_name}</span>
         </div>
-        <Button variant="outline" size="sm" onClick={handleLogout} data-testid="logout-button-mobile">
-          <LogOut size={14} />
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="icon" className="h-10 w-10" onClick={toggleLang} data-testid="lang-toggle-mobile">
+            <Languages size={16} />
+          </Button>
+          <Button variant="outline" size="icon" className="h-10 w-10" onClick={handleLogout} data-testid="logout-button-mobile">
+            <LogOut size={16} />
+          </Button>
+        </div>
       </div>
 
       <main className="flex-1 md:mr-0 pt-16 md:pt-0 min-w-0">
@@ -139,12 +158,12 @@ export default function Layout() {
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
-                    `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
+                    `flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-medium whitespace-nowrap min-h-[40px] ${
                       isActive ? "bg-primary text-white" : "bg-secondary text-muted-foreground"
                     }`
                   }
                 >
-                  <Icon size={14} /> {item.label}
+                  <Icon size={14} /> {t(item.tk)}
                 </NavLink>
               );
             })}

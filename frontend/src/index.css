@@ -6,12 +6,31 @@
 
 html, body {
     margin: 0;
-    direction: rtl;
+    /* dir attribute is now managed by I18nContext (document.documentElement.dir) */
     font-family: 'Cairo', 'Tajawal', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background-color: hsl(320 40% 98%);
     color: hsl(280 20% 15%);
+}
+
+/* Touch-friendly sizing on mobile */
+@media (hover: none) and (pointer: coarse) {
+    button, [role="button"], a, input, select, textarea {
+        min-height: 44px;
+    }
+    /* Bigger tap targets in table actions */
+    table button, table [role="button"] {
+        min-height: 40px;
+        min-width: 40px;
+    }
+}
+
+/* Prevent iOS text auto-zoom on input focus */
+@media (max-width: 768px) {
+    input, select, textarea {
+        font-size: 16px;
+    }
 }
 
 h1, h2, h3, h4, h5, h6, .font-heading {
