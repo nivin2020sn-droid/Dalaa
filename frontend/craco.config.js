@@ -38,6 +38,17 @@ let webpackConfig = {
     },
     configure: (webpackConfig) => {
 
+      // Polyfill node core modules for browser — required by bcryptjs in webpack 5
+      webpackConfig.resolve = webpackConfig.resolve || {};
+      webpackConfig.resolve.fallback = {
+        ...(webpackConfig.resolve.fallback || {}),
+        crypto: require.resolve("crypto-browserify"),
+        buffer: require.resolve("buffer/"),
+        stream: require.resolve("stream-browserify"),
+        process: require.resolve("process/browser.js"),
+        vm: false,
+      };
+
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {
           ...webpackConfig.watchOptions,
