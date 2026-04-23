@@ -14,6 +14,25 @@ html, body {
     color: hsl(280 20% 15%);
 }
 
+/* Custom app background (set from Settings page) */
+html.has-custom-bg body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: var(--app-bg-image);
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    opacity: 0.25;
+    pointer-events: none;
+    z-index: 0;
+}
+
+html.has-custom-bg #root {
+    position: relative;
+    z-index: 1;
+}
+
 /* Touch-friendly sizing on mobile */
 @media (hover: none) and (pointer: coarse) {
     button, [role="button"], a, input, select, textarea {

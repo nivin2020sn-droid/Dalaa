@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages } from "lucide-react";
+import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { exportBackup, restoreFromFile } from "../services/backup";
 
@@ -23,6 +23,7 @@ export default function Settings() {
   const [form, setForm] = useState(settings);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
+  const bgFileRef = useRef(null);
   const backupFileRef = useRef(null);
   const [pendingFile, setPendingFile] = useState(null);
   const [restoring, setRestoring] = useState(false);
@@ -64,6 +65,24 @@ export default function Settings() {
   };
 
   const removeLogo = () => setForm({ ...form, logo_url: "" });
+
+  const onBgPick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error(lang === "de" ? "Bild zu groß (max 4MB)" : "الصورة كبيرة، حد أقصى 4 ميجابايت");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm((f) => ({ ...f, background_url: reader.result }));
+      toast.success(lang === "de" ? "Hintergrund ausgewählt — jetzt speichern" : "تم اختيار الخلفية — اضغط حفظ لتثبيتها");
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const removeBg = () => setForm({ ...form, background_url: "" });
 
   return (
     <div data-testid="settings-page" className="max-w-3xl">
@@ -142,6 +161,56 @@ export default function Settings() {
             </div>
             <p className="text-xs text-muted-foreground mt-2">
               صيغ مدعومة: PNG / JPG / SVG — الحد الأقصى 2MB. يفضل صورة مربعة.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Background upload */}
+      <Card className="p-6 rounded-2xl card-ambient mb-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-accent/20 text-accent-foreground flex items-center justify-center">
+            <ImageIcon size={20} strokeWidth={1.75} />
+          </div>
+          <h3 className="font-heading font-bold text-lg">
+            {lang === "de" ? "App-Hintergrund" : "خلفية التطبيق"}
+          </h3>
+        </div>
+        <div className="flex items-center gap-5">
+          <div
+            className="w-32 h-20 rounded-xl bg-secondary border border-border overflow-hidden shrink-0 bg-cover bg-center"
+            style={form.background_url ? { backgroundImage: `url(${form.background_url})` } : {}}
+            data-testid="current-bg-preview"
+          >
+            {!form.background_url && (
+              <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                <ImageIcon size={24} />
+              </div>
+            )}
+          </div>
+          <div className="flex-1">
+            <input
+              ref={bgFileRef}
+              type="file"
+              accept="image/*"
+              onChange={onBgPick}
+              className="hidden"
+              data-testid="bg-file-input"
+            />
+            <div className="flex gap-2 flex-wrap">
+              <Button type="button" variant="outline" className="h-10" onClick={() => bgFileRef.current?.click()} disabled={!isAdmin} data-testid="upload-bg-button">
+                <Upload size={14} className="mx-1" /> {lang === "de" ? "Hintergrund wählen" : "اختر خلفية"}
+              </Button>
+              {form.background_url && (
+                <Button type="button" variant="ghost" className="h-10 text-destructive" onClick={removeBg} disabled={!isAdmin}>
+                  <Trash2 size={14} className="mx-1" /> {lang === "de" ? "Entfernen" : "إزالة"}
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+              {lang === "de"
+                ? "PNG / JPG — max 4 MB. Der Hintergrund wird mit geringer Opazität angezeigt, damit der Text lesbar bleibt."
+                : "PNG / JPG — حد أقصى 4 ميجابايت. الخلفية تظهر بشفافية خفيفة للحفاظ على وضوح النصوص."}
             </p>
           </div>
         </div>
@@ -289,14 +358,14 @@ export default function Settings() {
         </div>
 
         <div className="text-xs text-muted-foreground bg-secondary/50 rounded-lg p-3 leading-relaxed">
-          💡 النسخة تحتوي على: كل المنتجات، الخدمات، العملاء، المواعيد، الفواتير، المصاريف، المستخدمين، وإعدادات المحل.
-          البيانات محفوظة محلياً على الجهاز فقط — ننصح بأخذ نسخة احتياطية دورية.
+          💡 {lang === "de"
+            ? "Die Sicherung enthält: Produkte, Leistungen, Kunden, Termine, Rechnungen, Ausgaben, Benutzer & Einstellungen. Daten werden lokal gespeichert — regelmäßige Sicherung empfohlen."
+            : "النسخة تحتوي على: كل المنتجات، الخدمات، العملاء، المواعيد، الفواتير، المصاريف، المستخدمين، وإعدادات المحل. البيانات محفوظة محلياً على الجهاز فقط — ننصح بأخذ نسخة احتياطية دورية."}
         </div>
       </Card>
 
       {/* Restore confirmation dialog */}
-      <AlertDialog open={!!pendingFile} onOpenChange={(o) => { if (!o) setPendingFile(null); }}>
-        <AlertDialogContent>
+      <AlertDialog open={!!pendingFile} onOpenChange={(o) => { if (!o) setPendingFile(null); }}>        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="font-heading">⚠️ تأكيد الاستعادة</AlertDialogTitle>
             <AlertDialogDescription className="leading-relaxed">
@@ -335,6 +404,16 @@ export default function Settings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Designer credit footer */}
+      <div className="mt-10 pt-6 border-t border-border text-center" data-testid="designer-credit">
+        <div className="text-xs text-muted-foreground">
+          {lang === "de" ? "Entwickelt von" : "تصميم وتطوير"}
+        </div>
+        <div className="font-heading font-bold text-base mt-1 text-primary">
+          Bahaa Nasser
+        </div>
+      </div>
     </div>
   );
 }

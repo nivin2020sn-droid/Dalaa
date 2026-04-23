@@ -3,14 +3,15 @@ import db from "../db/db";
 export async function getSettings() {
   const s = await db.settings.get("main");
   return s || {
-    shop_name: "صالون",
-    tagline: "نظام محاسبة التجميل",
+    shop_name: "Dalaa Beauty",
+    tagline: "Salon & Beauty",
     logo_url: "",
+    background_url: "",
     address: "",
     phone: "",
     email: "",
     tax_id: "",
-    receipt_footer: "شكراً لزيارتكم • نتطلع لرؤيتكم مجدداً",
+    receipt_footer: "Vielen Dank für Ihren Besuch — شكراً لزيارتكم",
   };
 }
 

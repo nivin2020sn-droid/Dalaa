@@ -4,14 +4,15 @@ import { api } from "../api";
 const SettingsContext = createContext(null);
 
 const DEFAULTS = {
-  shop_name: "صالون",
-  tagline: "نظام محاسبة التجميل",
+  shop_name: "Dalaa Beauty",
+  tagline: "Salon & Beauty",
   logo_url: "",
+  background_url: "",
   address: "",
   phone: "",
   email: "",
   tax_id: "",
-  receipt_footer: "شكراً لزيارتكم • نتطلع لرؤيتكم مجدداً",
+  receipt_footer: "Vielen Dank für Ihren Besuch — شكراً لزيارتكم",
 };
 
 export function SettingsProvider({ children }) {
@@ -26,14 +27,24 @@ export function SettingsProvider({ children }) {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   // Update document title when shop name changes
   useEffect(() => {
     document.title = `${settings.shop_name} — ${settings.tagline}`;
   }, [settings.shop_name, settings.tagline]);
+
+  // Apply background image globally when set
+  useEffect(() => {
+    const root = document.documentElement;
+    if (settings.background_url) {
+      root.style.setProperty("--app-bg-image", `url('${settings.background_url.replace(/'/g, "\\'")}')`);
+      root.classList.add("has-custom-bg");
+    } else {
+      root.style.removeProperty("--app-bg-image");
+      root.classList.remove("has-custom-bg");
+    }
+  }, [settings.background_url]);
 
   return (
     <SettingsContext.Provider value={{ settings, reload: load, setSettings }}>
@@ -42,4 +53,6 @@ export function SettingsProvider({ children }) {
   );
 }
 
-export const useSettings = () => useContext(SettingsContext) || { settings: DEFAULTS, reload: () => {}, setSettings: () => {} };
+export const useSettings = () => useContext(SettingsContext) || {
+  settings: DEFAULTS, reload: () => {}, setSettings: () => {},
+};

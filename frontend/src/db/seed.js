@@ -31,14 +31,18 @@ export async function seedOnce() {
   if (!settings) {
     await db.settings.put({
       id: "main",
-      shop_name: "صالون",
-      tagline: "نظام محاسبة التجميل",
+      shop_name: "Dalaa Beauty",
+      tagline: "Salon & Beauty",
       logo_url: "",
+      background_url: "",
       address: "",
       phone: "",
       email: "",
       tax_id: "",
-      receipt_footer: "شكراً لزيارتكم • نتطلع لرؤيتكم مجدداً",
+      receipt_footer: "Vielen Dank für Ihren Besuch — شكراً لزيارتكم",
     });
+  } else if (settings.shop_name === "صالون" || !settings.shop_name) {
+    // Migrate older installs that still carry the default Arabic name
+    await db.settings.put({ ...settings, shop_name: "Dalaa Beauty" });
   }
 }

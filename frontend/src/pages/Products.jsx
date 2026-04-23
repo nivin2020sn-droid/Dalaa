@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, fmtEUR } from "../api";
 import { useI18n } from "../i18n/I18nContext";
 import { Card } from "../components/ui/card";
@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
-import { Plus, Pencil, Trash2, Package } from "lucide-react";
+import { Plus, Pencil, Trash2, Package, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
@@ -20,6 +20,7 @@ export default function Products() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState(null);
+  const imageInputRef = useRef(null);
 
   const load = async () => {
     const r = await api.get("/products");
@@ -101,7 +102,62 @@ export default function Products() {
                   <option value={0}>0% ({lang === "de" ? "befreit" : "معفى"})</option>
                 </select>
               </div>
-              <div className="col-span-2"><Label>{t("prod.image_url")}</Label><Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} /></div>
+              <div className="col-span-2">
+                <Label>{lang === "de" ? "Produktbild" : "صورة المنتج"}</Label>
+                <div className="flex items-center gap-3 mt-1">
+                  <div className="w-20 h-20 rounded-lg bg-secondary border border-border flex items-center justify-center overflow-hidden shrink-0">
+                    {form.image_url ? (
+                      <img src={form.image_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <Package className="text-muted-foreground" size={24} />
+                    )}
+                  </div>
+                  <div className="flex-1 flex flex-wrap gap-2">
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      data-testid="product-image-input"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 2 * 1024 * 1024) {
+                          toast.error(lang === "de" ? "Bild zu groß (max 2MB)" : "الصورة كبيرة (حد أقصى 2MB)");
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = () => setForm((f) => ({ ...f, image_url: reader.result }));
+                        reader.readAsDataURL(file);
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10"
+                      onClick={() => imageInputRef.current?.click()}
+                      data-testid="product-upload-image-btn"
+                    >
+                      <Upload size={14} className="mx-1" />
+                      {form.image_url
+                        ? (lang === "de" ? "Bild ersetzen" : "استبدال الصورة")
+                        : (lang === "de" ? "Bild hochladen" : "رفع صورة")}
+                    </Button>
+                    {form.image_url && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-10 text-destructive"
+                        onClick={() => setForm({ ...form, image_url: "" })}
+                      >
+                        <X size={14} className="mx-1" />
+                        {lang === "de" ? "Entfernen" : "إزالة"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="text-xs text-muted-foreground mt-2 p-2 bg-secondary/50 rounded-lg">
               💡 {lang === "de"
