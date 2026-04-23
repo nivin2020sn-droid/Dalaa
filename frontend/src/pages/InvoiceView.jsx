@@ -6,8 +6,8 @@ import { useSettings } from "../context/SettingsContext";
 import { useI18n } from "../i18n/I18nContext";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Printer, ArrowRight, ArrowLeft, Sparkles, FileDown, Ban } from "lucide-react";
-import { exportInvoiceToPdf } from "../services/pdf";
+import { Printer, ArrowRight, ArrowLeft, Sparkles, FileDown, Ban, MessageCircle } from "lucide-react";
+import { exportInvoiceToPdf, shareInvoiceToWhatsApp } from "../services/pdf";
 import { toast } from "sonner";
 
 const payLabels = {
@@ -40,6 +40,41 @@ export default function InvoiceView() {
       toast.success("PDF " + (lang === "de" ? "bereit" : "جاهز"));
     } catch (e) {
       toast.error(e?.message || "PDF error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleWhatsApp = async () => {
+    // Look up the customer's phone (if any) and let user confirm/edit.
+    let phone = "";
+    if (inv.customer_id) {
+      try {
+        const r = await api.get(`/customers`);
+        const c = (r.data || []).find((x) => x.id === inv.customer_id);
+        if (c?.phone) phone = c.phone;
+      } catch { /* ignore */ }
+    }
+    const entered = window.prompt(
+      lang === "de"
+        ? "WhatsApp-Nummer des Kunden (mit Ländervorwahl, z. B. 4917612345678):"
+        : "رقم واتساب العميل (برمز الدولة، مثلاً 4917612345678):",
+      phone || "",
+    );
+    if (!entered) return;
+    const cleaned = String(entered).replace(/[^\d]/g, "");
+    if (!cleaned) {
+      toast.error(lang === "de" ? "Ungültige Nummer" : "رقم غير صالح");
+      return;
+    }
+    setBusy(true);
+    try {
+      const messageText = lang === "de"
+        ? `${settings.shop_name}\nRechnung ${inv.invoice_number}\nGesamt: ${fmtEUR(inv.total)}\nVielen Dank!`
+        : `${settings.shop_name}\nفاتورة رقم ${inv.invoice_number}\nالإجمالي: ${fmtEUR(inv.total)}\nشكراً لزيارتكم!`;
+      await shareInvoiceToWhatsApp(printRef.current, inv.invoice_number, cleaned, messageText);
+    } catch (e) {
+      toast.error(e?.message || "WhatsApp error");
     } finally {
       setBusy(false);
     }
@@ -82,6 +117,14 @@ export default function InvoiceView() {
           </Button>
           <Button className="h-11" onClick={handlePdf} disabled={busy} data-testid="pdf-invoice-button">
             <FileDown size={16} className="mx-1" /> {t("inv.pdf_button")}
+          </Button>
+          <Button
+            className="h-11 bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={handleWhatsApp}
+            disabled={busy}
+            data-testid="whatsapp-invoice-button"
+          >
+            <MessageCircle size={16} className="mx-1" /> {lang === "de" ? "WhatsApp" : "واتساب"}
           </Button>
           {!isReversal && (
             <Button variant="destructive" className="h-11" onClick={handleStorno} disabled={busy} data-testid="storno-from-view-button">

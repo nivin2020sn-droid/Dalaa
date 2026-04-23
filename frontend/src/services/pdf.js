@@ -84,9 +84,64 @@ export async function exportInvoiceToPdf(domNode, filename) {
 }
 
 /**
- * Email an invoice PDF: same as export but hints the system to use mail.
- * On Web: just downloads — user can attach manually.
+ * Share an invoice PDF specifically to WhatsApp.
+ *
+ * - On native (Android/iOS): generates PDF, saves to Cache, opens the system
+ *   share sheet with the PDF attached and a prefilled caption. User taps
+ *   WhatsApp in the sheet; the PDF is attached and the caption is prefilled.
+ * - On web: downloads the PDF and opens `https://wa.me/<number>?text=...`
+ *   in a new tab so the user can attach the downloaded file manually.
  */
+export async function shareInvoiceToWhatsApp(domNode, filename, phone, messageText) {
+  if (!domNode) throw new Error("Invoice DOM node not found");
+
+  const canvas = await html2canvas(domNode, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: "#ffffff",
+    logging: false,
+  });
+  const imgData = canvas.toDataURL("image/png");
+
+  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 8;
+  const usableWidth = pageWidth - margin * 2;
+  const usableHeight = pageHeight - margin * 2;
+
+  const imgProps = pdf.getImageProperties(imgData);
+  let imgWidth = usableWidth;
+  let imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+  if (imgHeight > usableHeight) {
+    imgHeight = usableHeight;
+    imgWidth = (imgProps.width * imgHeight) / imgProps.height;
+  }
+  const xOff = (pageWidth - imgWidth) / 2;
+  pdf.addImage(imgData, "PNG", xOff, margin, imgWidth, imgHeight);
+
+  const safeFilename = (filename || "invoice") + ".pdf";
+
+  if (Capacitor.isNativePlatform()) {
+    const base64 = pdf.output("datauristring").split(",")[1];
+    const result = await Filesystem.writeFile({
+      path: safeFilename,
+      data: base64,
+      directory: Directory.Cache,
+    });
+    await Share.share({
+      title: safeFilename,
+      text: messageText,
+      url: result.uri,
+      dialogTitle: "WhatsApp",
+    });
+  } else {
+    // Web: trigger the download, then open WhatsApp in a new tab.
+    pdf.save(safeFilename);
+    const waUrl = `https://wa.me/${encodeURIComponent(phone)}?text=${encodeURIComponent(messageText)}`;
+    window.open(waUrl, "_blank", "noopener");
+  }
+}
 export async function emailInvoicePdf(domNode, filename, recipientHint) {
   if (Capacitor.isNativePlatform()) {
     // Same flow — user picks Gmail from the share sheet
