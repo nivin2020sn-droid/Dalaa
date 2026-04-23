@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, fmtEUR } from "../api";
 import { useI18n } from "../i18n/I18nContext";
 import { Card } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { FileText } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -10,7 +13,7 @@ import {
 const COLORS = ["hsl(282 44% 47%)", "hsl(335 72% 68%)", "hsl(260 55% 58%)", "hsl(310 60% 60%)", "hsl(350 65% 70%)"];
 
 export default function Reports() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [data, setData] = useState(null);
 
   useEffect(() => { api.get("/reports/dashboard").then((r) => setData(r.data)); }, []);
@@ -26,9 +29,17 @@ export default function Reports() {
 
   return (
     <div data-testid="reports-page">
-      <div className="mb-6">
-        <h1 className="font-heading text-3xl md:text-4xl font-bold">{t("rep.title")}</h1>
-        <p className="text-muted-foreground mt-1">{t("rep.subtitle")}</p>
+      <div className="mb-6 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="font-heading text-3xl md:text-4xl font-bold">{t("rep.title")}</h1>
+          <p className="text-muted-foreground mt-1">{t("rep.subtitle")}</p>
+        </div>
+        <Link to="/reports/yearly-tax">
+          <Button className="h-11" data-testid="open-yearly-tax-button">
+            <FileText size={16} className="mx-1" />
+            {lang === "de" ? "Jahresbericht (Finanzamt)" : "التقرير السنوي للضرائب"}
+          </Button>
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

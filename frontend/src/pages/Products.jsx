@@ -84,7 +84,7 @@ export default function Products() {
               <div><Label>{t("prod.category")}</Label><Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></div>
               <div><Label>{t("prod.cost_price")}</Label><Input type="number" value={form.cost_price} onChange={(e) => setForm({ ...form, cost_price: e.target.value })} /></div>
               <div>
-                <Label>{t("prod.sale_price")} <span className="text-xs text-muted-foreground">({lang === "de" ? "netto" : "صافي"})</span></Label>
+                <Label>{t("prod.sale_price")} <span className="text-xs text-muted-foreground">({lang === "de" ? "Brutto, inkl. MwSt" : "شامل الضريبة"})</span></Label>
                 <Input type="number" value={form.sale_price} onChange={(e) => setForm({ ...form, sale_price: e.target.value })} data-testid="product-price-input" />
               </div>
               <div><Label>{t("prod.stock")}</Label><Input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} data-testid="product-stock-input" /></div>
@@ -161,8 +161,8 @@ export default function Products() {
             </div>
             <div className="text-xs text-muted-foreground mt-2 p-2 bg-secondary/50 rounded-lg">
               💡 {lang === "de"
-                ? "Der Verkaufspreis ist der NETTO-Preis. Die MwSt wird beim Kassieren automatisch hinzugerechnet."
-                : "السعر المدخل هو الصافي. الضريبة تُضاف تلقائياً عند البيع."}
+                ? "Der Verkaufspreis ist BRUTTO (inkl. MwSt). Auf der Rechnung werden Netto, MwSt und Brutto separat ausgewiesen."
+                : "السعر المدخل شامل الضريبة (Brutto). في الفاتورة يظهر الصافي وقيمة الضريبة والإجمالي بشكل منفصل."}
             </div>
             <Button onClick={save} className="mt-4 h-11" data-testid="save-product-button">{t("common.save")}</Button>
           </DialogContent>

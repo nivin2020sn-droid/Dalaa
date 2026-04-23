@@ -54,7 +54,7 @@ export default function Services() {
               <div><Label>{t("prod.category")}</Label><Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></div>
               <div><Label>{t("svc.duration")}</Label><Input type="number" value={form.duration_minutes} onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })} /></div>
               <div className="col-span-2">
-                <Label>{t("common.price")} <span className="text-xs text-muted-foreground">({lang === "de" ? "netto" : "صافي"})</span></Label>
+                <Label>{t("common.price")} <span className="text-xs text-muted-foreground">({lang === "de" ? "Brutto, inkl. MwSt" : "شامل الضريبة"})</span></Label>
                 <Input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} data-testid="service-price-input" />
               </div>
               <div className="col-span-2">
@@ -74,8 +74,8 @@ export default function Services() {
             </div>
             <div className="text-xs text-muted-foreground mt-2 p-2 bg-secondary/50 rounded-lg">
               💡 {lang === "de"
-                ? "Der Preis ist der NETTO-Preis. Die MwSt wird automatisch hinzugerechnet."
-                : "السعر المدخل هو الصافي. الضريبة تُضاف تلقائياً."}
+                ? "Der Preis ist BRUTTO (inkl. MwSt). Auf der Rechnung werden Netto und MwSt separat ausgewiesen."
+                : "السعر المدخل شامل الضريبة (Brutto). في الفاتورة يظهر الصافي وقيمة الضريبة بشكل منفصل."}
             </div>
             <Button onClick={save} className="mt-4 h-11" data-testid="save-service-button">{t("common.save")}</Button>
           </DialogContent>

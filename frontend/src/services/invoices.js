@@ -22,16 +22,16 @@ async function writeAudit(action, entity, payload = {}) {
 
 /**
  * Compute VAT breakdown on invoice items. Each item carries vat_rate.
- * Prices stored on products/services are treated as NET (excl. VAT) —
- * the user enters the net price and VAT is added automatically on top.
+ * Items store GROSS unit price (Brutto — tax-inclusive). The net and VAT
+ * amounts are derived by reverse-calculation from the gross.
  */
 function computeVat(items) {
   const byRate = {};
   for (const it of items) {
     const rate = Number(it.vat_rate ?? 19);
-    const net = Number(it.net_total ?? 0);
-    const vat = net * (rate / 100);
-    const gross = net + vat;
+    const gross = Number(it.total || 0);
+    const net = Math.round((gross / (1 + rate / 100)) * 100) / 100;
+    const vat = Math.round((gross - net) * 100) / 100;
     byRate[rate] = byRate[rate] || { rate, net: 0, vat: 0, gross: 0 };
     byRate[rate].net += net;
     byRate[rate].vat += vat;
@@ -73,7 +73,7 @@ export async function createInvoice(body) {
   const user = await currentUser();
 
   // Enrich items with their VAT rate at time of sale (snapshot, legally important).
-  // Prices are NET. VAT is computed and added automatically.
+  // Prices are GROSS (Brutto — tax-inclusive). Net and VAT are derived.
   const items = [];
   for (const it of body.items || []) {
     let vat_rate = it.vat_rate;
@@ -87,20 +87,21 @@ export async function createInvoice(body) {
       }
     }
     const qty = Number(it.quantity || 0);
-    const unit_price = Number(it.unit_price || 0); // NET unit price
-    const net_line = Math.round(qty * unit_price * 100) / 100;
-    const vat_line = Math.round(net_line * (Number(vat_rate) / 100) * 100) / 100;
-    const gross_line = Math.round((net_line + vat_line) * 100) / 100;
+    const unit_price = Number(it.unit_price || 0); // GROSS unit price (incl. VAT)
+    const rate = Number(vat_rate);
+    const gross_line = Math.round(qty * unit_price * 100) / 100;
+    const net_line = Math.round((gross_line / (1 + rate / 100)) * 100) / 100;
+    const vat_line = Math.round((gross_line - net_line) * 100) / 100;
     items.push({
       item_id: it.item_id,
       item_type: it.item_type,
       name: it.name,
       quantity: qty,
-      unit_price,            // NET per unit
-      net_total: net_line,   // line net
-      vat_total: vat_line,   // line vat
-      total: gross_line,     // line gross (what customer pays for this line)
-      vat_rate: Number(vat_rate),
+      unit_price,            // GROSS per unit (what customer pays per unit)
+      net_total: net_line,   // line net (derived)
+      vat_total: vat_line,   // line vat (derived)
+      total: gross_line,     // line gross
+      vat_rate: rate,
     });
   }
 

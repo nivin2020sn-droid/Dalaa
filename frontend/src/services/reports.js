@@ -78,3 +78,97 @@ export async function dashboardReport() {
     top_services,
   };
 }
+
+/**
+ * German annual tax report (Jahres-Umsatzsteuer-Zusammenstellung).
+ * Aggregates all active invoices (including reversals — they subtract automatically
+ * because their totals are negative) for the given calendar year.
+ *
+ * Returns: year, gross/net/VAT totals, per-rate breakdown, per-month breakdown,
+ * total expenses, profit, invoice counts.
+ */
+export async function yearlyTaxReport({ year } = {}) {
+  const y = Number(year) || new Date().getFullYear();
+  const [invoices, expenses] = await Promise.all([
+    db.invoices.toArray(),
+    db.expenses.toArray(),
+  ]);
+
+  const yearPrefix = String(y);
+  const yearInv = invoices.filter((i) => (i.created_at || "").startsWith(yearPrefix));
+  const yearExp = expenses.filter((e) => (e.date || "").startsWith(yearPrefix));
+
+  // Aggregate per VAT rate and per month
+  const byRate = {};
+  const byMonth = {};
+  let active_count = 0;
+  let reversal_count = 0;
+  let gross_sum = 0;
+  let net_sum = 0;
+  let vat_sum = 0;
+
+  for (let m = 1; m <= 12; m++) {
+    const key = String(m).padStart(2, "0");
+    byMonth[key] = { month: key, gross: 0, net: 0, vat: 0, count: 0 };
+  }
+
+  for (const inv of yearInv) {
+    if (inv.status === "reversal") reversal_count += 1;
+    else active_count += 1;
+
+    const monthKey = (inv.created_at || "").slice(5, 7);
+    if (byMonth[monthKey]) {
+      byMonth[monthKey].gross += inv.total || 0;
+      byMonth[monthKey].net += inv.net_total || 0;
+      byMonth[monthKey].vat += inv.vat_total || 0;
+      byMonth[monthKey].count += 1;
+    }
+
+    gross_sum += inv.total || 0;
+    net_sum += inv.net_total || 0;
+    vat_sum += inv.vat_total || 0;
+
+    for (const b of inv.vat_breakdown || []) {
+      const rate = Number(b.rate);
+      byRate[rate] = byRate[rate] || { rate, net: 0, vat: 0, gross: 0 };
+      byRate[rate].net += Number(b.net || 0);
+      byRate[rate].vat += Number(b.vat || 0);
+      byRate[rate].gross += Number(b.gross || 0);
+    }
+  }
+
+  const rates = Object.values(byRate)
+    .map((r) => ({
+      rate: r.rate,
+      net: Math.round(r.net * 100) / 100,
+      vat: Math.round(r.vat * 100) / 100,
+      gross: Math.round(r.gross * 100) / 100,
+    }))
+    .sort((a, b) => b.rate - a.rate);
+
+  const months = Object.values(byMonth).map((m) => ({
+    month: m.month,
+    gross: Math.round(m.gross * 100) / 100,
+    net: Math.round(m.net * 100) / 100,
+    vat: Math.round(m.vat * 100) / 100,
+    count: m.count,
+  }));
+
+  const expenses_total = yearExp.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const profit = net_sum - expenses_total; // Gewinn (net revenue − expenses)
+
+  return {
+    year: y,
+    generated_at: new Date().toISOString(),
+    invoices_count: yearInv.length,
+    active_invoices: active_count,
+    reversal_invoices: reversal_count,
+    gross_total: Math.round(gross_sum * 100) / 100,
+    net_total: Math.round(net_sum * 100) / 100,
+    vat_total: Math.round(vat_sum * 100) / 100,
+    expenses_total: Math.round(expenses_total * 100) / 100,
+    profit: Math.round(profit * 100) / 100,
+    by_rate: rates,
+    by_month: months,
+  };
+}

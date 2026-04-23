@@ -18,6 +18,11 @@ async function handleGet(path) {
   if (path === "/auth/users") return await auth.listUsers();
   if (path === "/settings") return await settings.getSettings();
   if (path === "/reports/dashboard") return await reports.dashboardReport();
+  if (path.startsWith("/reports/yearly-tax")) {
+    const q = path.split("?")[1] || "";
+    const year = new URLSearchParams(q).get("year");
+    return await reports.yearlyTaxReport({ year });
+  }
   if (path === "/invoices") return await invoices.listInvoices();
 
   const invMatch = path.match(/^\/invoices\/(.+)$/);

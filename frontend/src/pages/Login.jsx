@@ -33,6 +33,10 @@ export default function Login() {
 
   if (user) return <Navigate to="/dashboard" replace />;
 
+  const bgImage = settings.login_background_url
+    ? `url('${settings.login_background_url}')`
+    : "url('https://images.pexels.com/photos/13068357/pexels-photo-13068357.jpeg')";
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -90,8 +94,7 @@ export default function Login() {
     <div
       className="min-h-screen flex items-center justify-center p-4 relative"
       style={{
-        backgroundImage:
-          "linear-gradient(rgba(55,20,65,0.6), rgba(90,30,75,0.75)), url('https://images.pexels.com/photos/13068357/pexels-photo-13068357.jpeg')",
+        backgroundImage: `linear-gradient(rgba(55,20,65,0.55), rgba(90,30,75,0.7)), ${bgImage}`,
         backgroundSize: "cover",
         backgroundPosition: "center",
       }}

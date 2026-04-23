@@ -49,7 +49,7 @@ export default function POS() {
 
   const addToCart = (item, type) => {
     const existing = cart.find((c) => c.item_id === item.id && c.item_type === type);
-    const price = type === "product" ? item.sale_price : item.price; // NET price
+    const price = type === "product" ? item.sale_price : item.price; // GROSS price (incl. VAT)
     const vat_rate = item.vat_rate ?? 19;
     if (existing) {
       setCart(cart.map((c) =>
@@ -64,7 +64,7 @@ export default function POS() {
         name: item.name,
         quantity: 1,
         unit_price: price,
-        total: price,     // line net (qty × net)
+        total: price,     // line gross (qty × gross_unit)
         vat_rate,
       }]);
     }
@@ -80,25 +80,26 @@ export default function POS() {
 
   const removeItem = (idx) => setCart(cart.filter((_, i) => i !== idx));
 
-  // Cart totals with automatic VAT (prices are NET)
+  // Cart totals with automatic VAT breakdown (prices are GROSS — Brutto).
   const { net_total, vat_by_rate, gross_total } = useMemo(() => {
     const byRate = {};
-    let net_sum = 0;
+    let gross_sum = 0;
     for (const c of cart) {
-      const net = Number(c.total || 0);
+      const gross = Number(c.total || 0);
       const rate = Number(c.vat_rate ?? 19);
-      net_sum += net;
-      const vat = net * (rate / 100);
+      gross_sum += gross;
+      const net = gross / (1 + rate / 100);
+      const vat = gross - net;
       byRate[rate] = (byRate[rate] || 0) + vat;
     }
     const vat_sum = Object.values(byRate).reduce((s, v) => s + v, 0);
     return {
-      net_total: Math.round(net_sum * 100) / 100,
+      net_total: Math.round((gross_sum - vat_sum) * 100) / 100,
       vat_by_rate: Object.entries(byRate).map(([rate, vat]) => ({
         rate: Number(rate),
         vat: Math.round(vat * 100) / 100,
       })),
-      gross_total: Math.round((net_sum + vat_sum) * 100) / 100,
+      gross_total: Math.round(gross_sum * 100) / 100,
     };
   }, [cart]);
 

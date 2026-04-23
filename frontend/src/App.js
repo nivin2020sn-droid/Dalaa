@@ -16,6 +16,7 @@ import Invoices from "./pages/Invoices";
 import InvoiceView from "./pages/InvoiceView";
 import Expenses from "./pages/Expenses";
 import Reports from "./pages/Reports";
+import YearlyTaxReport from "./pages/YearlyTaxReport";
 import SettingsPage from "./pages/Settings";
 
 function Protected({ children }) {
@@ -57,6 +58,7 @@ function App() {
               <Route path="invoices/:id" element={<InvoiceView />} />
               <Route path="expenses" element={<Expenses />} />
               <Route path="reports" element={<Reports />} />
+              <Route path="reports/yearly-tax" element={<YearlyTaxReport />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
