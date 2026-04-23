@@ -18,7 +18,7 @@ import { exportBackup, restoreFromFile } from "../services/backup";
 
 export default function Settings() {
   const { settings, reload } = useSettings();
-  const { user, setUser } = useAuth();
+  const { user } = useAuth();
   const { t, lang, setLang } = useI18n();
   const [form, setForm] = useState(settings);
   const [saving, setSaving] = useState(false);
@@ -29,19 +29,13 @@ export default function Settings() {
   const [restoring, setRestoring] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  // Account (profile + password) state
-  const [account, setAccount] = useState({ name: "", email: "" });
+  // Password change form state
   const [pwd, setPwd] = useState({ current_password: "", new_password: "", confirm: "" });
-  const [savingAccount, setSavingAccount] = useState(false);
   const [savingPwd, setSavingPwd] = useState(false);
 
   useEffect(() => {
     setForm(settings);
   }, [settings]);
-
-  useEffect(() => {
-    if (user) setAccount({ name: user.name || "", email: user.email || "" });
-  }, [user]);
 
   const isAdmin = user?.role === "admin";
 
@@ -150,56 +144,25 @@ export default function Settings() {
               {lang === "de" ? "Mein Konto" : "حسابي"}
             </h3>
             <p className="text-xs text-muted-foreground mt-1">
-              {lang === "de" ? "Name, E-Mail und Passwort aktualisieren" : "تعديل الاسم والبريد وكلمة المرور"}
+              {lang === "de" ? "Benutzername und Passwort" : "اسم المستخدم وكلمة المرور"}
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label>{lang === "de" ? "Name" : "الاسم"}</Label>
-            <Input
-              value={account.name}
-              onChange={(e) => setAccount({ ...account, name: e.target.value })}
-              data-testid="account-name-input"
-            />
-          </div>
-          <div>
-            <Label>{lang === "de" ? "E-Mail (Login)" : "البريد الإلكتروني (للدخول)"}</Label>
-            <Input
-              type="email"
-              value={account.email}
-              onChange={(e) => setAccount({ ...account, email: e.target.value })}
-              data-testid="account-email-input"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            disabled={savingAccount}
-            onClick={async () => {
-              if (!account.email || !account.name) {
-                toast.error(lang === "de" ? "Name und E-Mail erforderlich" : "الاسم والبريد مطلوبان");
-                return;
-              }
-              setSavingAccount(true);
-              try {
-                const r = await api.put("/auth/profile", account);
-                setUser(r.data);
-                toast.success(lang === "de" ? "Konto aktualisiert" : "تم تحديث الحساب");
-              } catch (e) {
-                toast.error(e?.response?.data?.detail || "Error");
-              } finally {
-                setSavingAccount(false);
-              }
-            }}
-            className="h-11"
-            data-testid="save-account-button"
-          >
-            {savingAccount ? t("common.loading") : (lang === "de" ? "Konto speichern" : "حفظ الحساب")}
-          </Button>
+        <div>
+          <Label>{lang === "de" ? "Benutzername" : "اسم المستخدم"}</Label>
+          <Input
+            value={user?.email || ""}
+            disabled
+            readOnly
+            className="font-mono"
+            data-testid="account-username-display"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {lang === "de"
+              ? "Der Benutzername ist fest und kann nicht geändert werden."
+              : "اسم المستخدم ثابت ولا يمكن تعديله."}
+          </p>
         </div>
 
         <div className="border-t border-border pt-4 mt-2">
@@ -238,7 +201,12 @@ export default function Settings() {
               />
             </div>
           </div>
-          <div className="flex justify-end mt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
+            <p className="text-[11px] text-muted-foreground">
+              {lang === "de"
+                ? "Passwort vergessen? Auf der Login-Seite zurücksetzen."
+                : "نسيت كلمة المرور؟ استخدم \"نسيت كلمة المرور؟\" في صفحة الدخول لإعادة التعيين عبر حساب المستر."}
+            </p>
             <Button
               type="button"
               variant="secondary"

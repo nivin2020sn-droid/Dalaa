@@ -27,8 +27,8 @@ export function AuthProvider({ children }) {
     fetchMe();
   }, []);
 
-  const login = async (email, password) => {
-    const r = await api.post("/auth/login", { email, password });
+  const login = async (username, password) => {
+    const r = await api.post("/auth/login", { username, password });
     localStorage.setItem("salon_token", r.data.token);
     setUser(r.data.user);
     return r.data.user;

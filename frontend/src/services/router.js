@@ -33,6 +33,7 @@ async function handlePost(path, body) {
   if (path === "/auth/login") return await auth.login(body);
   if (path === "/auth/register") return await auth.registerUser(body);
   if (path === "/auth/change-password") return await auth.changePassword(body);
+  if (path === "/auth/reset-with-master") return await auth.resetWithMaster(body);
   if (path === "/invoices") return await invoices.createInvoice(body);
 
   const stornoMatch = path.match(/^\/invoices\/(.+)\/storno$/);
