@@ -1,28 +1,17 @@
 {
-  "name": "salon-accounting-monorepo",
+  "name": "salon-mobile-app",
   "version": "1.0.0",
   "private": true,
-  "description": "Beauty salon accounting app — FastAPI + React + MongoDB monorepo",
+  "description": "Offline-first beauty salon accounting app — React + IndexedDB + Capacitor (Android APK)",
   "scripts": {
-    "install:frontend": "cd frontend && yarn install --frozen-lockfile",
-    "install:backend": "cd backend && pip install -r requirements.txt",
-    "install:all": "yarn install:backend && yarn install:frontend",
-
-    "dev:frontend": "cd frontend && yarn start",
-    "dev:backend": "cd backend && uvicorn server:app --reload --host 0.0.0.0 --port 8001",
-    "dev": "concurrently -n backend,frontend -c cyan,magenta \"yarn dev:backend\" \"yarn dev:frontend\"",
-
-    "build": "yarn install:frontend && cd frontend && yarn build",
-    "build:all": "yarn install:backend && yarn build",
-
-    "start": "cd backend && STATIC_DIR=\"$(pwd)/../frontend/build\" uvicorn server:app --host 0.0.0.0 --port ${PORT:-8000}",
-
-    "lint:frontend": "cd frontend && yarn eslint src --ext .js,.jsx",
-    "test:backend": "cd backend && pytest -q || true",
-    "clean": "rm -rf frontend/build backend/__pycache__"
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
+    "install:all": "cd frontend && yarn install",
+    "dev": "cd frontend && yarn start",
+    "build": "cd frontend && yarn build",
+    "cap:add-android": "cd frontend && npx cap add android",
+    "cap:sync": "cd frontend && npx cap sync android",
+    "cap:open": "cd frontend && npx cap open android",
+    "apk:debug": "cd frontend && yarn build && npx cap sync android && cd android && ./gradlew assembleDebug",
+    "apk:release": "cd frontend && yarn build && npx cap sync android && cd android && ./gradlew assembleRelease"
   },
   "engines": {
     "node": ">=18",
