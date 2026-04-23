@@ -32,6 +32,7 @@ async function handleGet(path) {
 async function handlePost(path, body) {
   if (path === "/auth/login") return await auth.login(body);
   if (path === "/auth/register") return await auth.registerUser(body);
+  if (path === "/auth/change-password") return await auth.changePassword(body);
   if (path === "/invoices") return await invoices.createInvoice(body);
 
   const stornoMatch = path.match(/^\/invoices\/(.+)\/storno$/);
@@ -45,6 +46,7 @@ async function handlePost(path, body) {
 
 async function handlePut(path, body) {
   if (path === "/settings") return await settings.updateSettings(body);
+  if (path === "/auth/profile") return await auth.updateProfile(body);
   for (const key of Object.keys(resourceMap)) {
     const m = path.match(new RegExp(`^\\/${key}\\/(.+)$`));
     if (m) return await resourceMap[key].update(m[1], body);

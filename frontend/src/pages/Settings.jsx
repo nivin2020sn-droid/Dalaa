@@ -12,13 +12,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages, Image as ImageIcon } from "lucide-react";
+import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages, Image as ImageIcon, UserCog, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { exportBackup, restoreFromFile } from "../services/backup";
 
 export default function Settings() {
   const { settings, reload } = useSettings();
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const { t, lang, setLang } = useI18n();
   const [form, setForm] = useState(settings);
   const [saving, setSaving] = useState(false);
@@ -29,9 +29,19 @@ export default function Settings() {
   const [restoring, setRestoring] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  // Account (profile + password) state
+  const [account, setAccount] = useState({ name: "", email: "" });
+  const [pwd, setPwd] = useState({ current_password: "", new_password: "", confirm: "" });
+  const [savingAccount, setSavingAccount] = useState(false);
+  const [savingPwd, setSavingPwd] = useState(false);
+
   useEffect(() => {
     setForm(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (user) setAccount({ name: user.name || "", email: user.email || "" });
+  }, [user]);
 
   const isAdmin = user?.role === "admin";
 
@@ -126,6 +136,146 @@ export default function Settings() {
           >
             🇩🇪 Deutsch
           </Button>
+        </div>
+      </Card>
+
+      {/* Account & password */}
+      <Card className="p-6 rounded-2xl card-ambient mb-5 space-y-4" data-testid="account-card">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+            <UserCog size={20} strokeWidth={1.75} />
+          </div>
+          <div>
+            <h3 className="font-heading font-bold text-lg leading-tight">
+              {lang === "de" ? "Mein Konto" : "حسابي"}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {lang === "de" ? "Name, E-Mail und Passwort aktualisieren" : "تعديل الاسم والبريد وكلمة المرور"}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label>{lang === "de" ? "Name" : "الاسم"}</Label>
+            <Input
+              value={account.name}
+              onChange={(e) => setAccount({ ...account, name: e.target.value })}
+              data-testid="account-name-input"
+            />
+          </div>
+          <div>
+            <Label>{lang === "de" ? "E-Mail (Login)" : "البريد الإلكتروني (للدخول)"}</Label>
+            <Input
+              type="email"
+              value={account.email}
+              onChange={(e) => setAccount({ ...account, email: e.target.value })}
+              data-testid="account-email-input"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            disabled={savingAccount}
+            onClick={async () => {
+              if (!account.email || !account.name) {
+                toast.error(lang === "de" ? "Name und E-Mail erforderlich" : "الاسم والبريد مطلوبان");
+                return;
+              }
+              setSavingAccount(true);
+              try {
+                const r = await api.put("/auth/profile", account);
+                setUser(r.data);
+                toast.success(lang === "de" ? "Konto aktualisiert" : "تم تحديث الحساب");
+              } catch (e) {
+                toast.error(e?.response?.data?.detail || "Error");
+              } finally {
+                setSavingAccount(false);
+              }
+            }}
+            className="h-11"
+            data-testid="save-account-button"
+          >
+            {savingAccount ? t("common.loading") : (lang === "de" ? "Konto speichern" : "حفظ الحساب")}
+          </Button>
+        </div>
+
+        <div className="border-t border-border pt-4 mt-2">
+          <div className="flex items-center gap-2 mb-3">
+            <KeyRound size={16} className="text-accent" />
+            <h4 className="font-heading font-bold text-base">
+              {lang === "de" ? "Passwort ändern" : "تغيير كلمة المرور"}
+            </h4>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <Label>{lang === "de" ? "Aktuelles Passwort" : "كلمة المرور الحالية"}</Label>
+              <Input
+                type="password"
+                value={pwd.current_password}
+                onChange={(e) => setPwd({ ...pwd, current_password: e.target.value })}
+                data-testid="current-password-input"
+              />
+            </div>
+            <div>
+              <Label>{lang === "de" ? "Neues Passwort" : "كلمة المرور الجديدة"}</Label>
+              <Input
+                type="password"
+                value={pwd.new_password}
+                onChange={(e) => setPwd({ ...pwd, new_password: e.target.value })}
+                data-testid="new-password-input"
+              />
+            </div>
+            <div>
+              <Label>{lang === "de" ? "Bestätigen" : "تأكيد الجديدة"}</Label>
+              <Input
+                type="password"
+                value={pwd.confirm}
+                onChange={(e) => setPwd({ ...pwd, confirm: e.target.value })}
+                data-testid="confirm-password-input"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end mt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={savingPwd}
+              onClick={async () => {
+                if (!pwd.current_password || !pwd.new_password) {
+                  toast.error(lang === "de" ? "Alle Felder ausfüllen" : "أكمل الحقول");
+                  return;
+                }
+                if (pwd.new_password !== pwd.confirm) {
+                  toast.error(lang === "de" ? "Passwörter stimmen nicht überein" : "كلمتا المرور غير متطابقتين");
+                  return;
+                }
+                if (pwd.new_password.length < 4) {
+                  toast.error(lang === "de" ? "Neues Passwort zu kurz (min. 4 Zeichen)" : "كلمة المرور قصيرة (4 أحرف على الأقل)");
+                  return;
+                }
+                setSavingPwd(true);
+                try {
+                  await api.post("/auth/change-password", {
+                    current_password: pwd.current_password,
+                    new_password: pwd.new_password,
+                  });
+                  setPwd({ current_password: "", new_password: "", confirm: "" });
+                  toast.success(lang === "de" ? "Passwort geändert" : "تم تغيير كلمة المرور");
+                } catch (e) {
+                  toast.error(e?.response?.data?.detail || "Error");
+                } finally {
+                  setSavingPwd(false);
+                }
+              }}
+              className="h-11"
+              data-testid="save-password-button"
+            >
+              {savingPwd ? t("common.loading") : (lang === "de" ? "Passwort ändern" : "تغيير كلمة المرور")}
+            </Button>
+          </div>
         </div>
       </Card>
 

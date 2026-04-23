@@ -78,3 +78,49 @@ export async function listUsers() {
   const rows = await db.users.toArray();
   return rows.map(({ password: _p, ...r }) => r);
 }
+
+export async function updateProfile({ name, email }) {
+  const uid = localStorage.getItem(CURRENT_USER_KEY);
+  if (!uid) {
+    const err = new Error("Not authenticated");
+    err.response = { status: 401, data: { detail: err.message } };
+    throw err;
+  }
+  if (email) {
+    const other = await db.users.where("email").equals(email).first();
+    if (other && other.id !== uid) {
+      const err = new Error("Email already in use");
+      err.response = { status: 400, data: { detail: err.message } };
+      throw err;
+    }
+  }
+  const patch = {};
+  if (name !== undefined) patch.name = name;
+  if (email !== undefined) patch.email = email;
+  await db.users.update(uid, patch);
+  const user = await db.users.get(uid);
+  const { password: _p, ...pub } = user;
+  return pub;
+}
+
+export async function changePassword({ current_password, new_password }) {
+  const uid = localStorage.getItem(CURRENT_USER_KEY);
+  if (!uid) {
+    const err = new Error("Not authenticated");
+    err.response = { status: 401, data: { detail: err.message } };
+    throw err;
+  }
+  const user = await db.users.get(uid);
+  if (!user || !bcrypt.compareSync(current_password, user.password)) {
+    const err = new Error("كلمة المرور الحالية غير صحيحة");
+    err.response = { status: 401, data: { detail: err.message } };
+    throw err;
+  }
+  if (!new_password || new_password.length < 4) {
+    const err = new Error("كلمة المرور الجديدة قصيرة جداً (4 أحرف على الأقل)");
+    err.response = { status: 400, data: { detail: err.message } };
+    throw err;
+  }
+  await db.users.update(uid, { password: bcrypt.hashSync(new_password, 8) });
+  return { ok: true };
+}
