@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import db from "./db";
+import { DEFAULT_LOGO_DATA_URL } from "./default_logo";
 
 export const newId = () =>
   (crypto.randomUUID && crypto.randomUUID()) ||
@@ -82,8 +83,8 @@ export async function seedOnce() {
     await db.settings.put({
       id: "main",
       shop_name: "Dalaa Beauty",
-      tagline: "Salon & Beauty",
-      logo_url: "",
+      tagline: "Beauty center & Academy",
+      logo_url: DEFAULT_LOGO_DATA_URL,
       background_url: "",
       address: "",
       phone: "",
@@ -91,7 +92,10 @@ export async function seedOnce() {
       tax_id: "",
       receipt_footer: "Vielen Dank für Ihren Besuch — شكراً لزيارتكم",
     });
-  } else if (settings.shop_name === "صالون" || !settings.shop_name) {
-    await db.settings.put({ ...settings, shop_name: "Dalaa Beauty" });
+  } else {
+    const patch = {};
+    if (settings.shop_name === "صالون" || !settings.shop_name) patch.shop_name = "Dalaa Beauty";
+    if (!settings.logo_url) patch.logo_url = DEFAULT_LOGO_DATA_URL;
+    if (Object.keys(patch).length) await db.settings.put({ ...settings, ...patch });
   }
 }

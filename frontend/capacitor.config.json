@@ -1,11 +1,11 @@
 {
   "appId": "com.salon.accounting",
-  "appName": "صالون",
+  "appName": "Dalaa Beauty",
   "webDir": "build",
   "bundledWebRuntime": false,
   "android": {
     "allowMixedContent": false,
-    "backgroundColor": "#faf6ee"
+    "backgroundColor": "#ffffff"
   },
   "server": {
     "androidScheme": "https"

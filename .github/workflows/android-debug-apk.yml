@@ -54,6 +54,10 @@ jobs:
             npx cap add android
           fi
 
+      - name: Generate Android icons & splash
+        working-directory: frontend
+        run: npx capacitor-assets generate --android --iconBackgroundColor '#ffffff' --splashBackgroundColor '#ffffff' || echo "assets generation failed — continuing with default icons"
+
       - name: Sync Capacitor with Android
         working-directory: frontend
         run: npx cap sync android
