@@ -1,0 +1,28 @@
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.DS_Store
+**/.git
+**/.gitignore
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Dev build outputs
+frontend/build
+frontend/.eslintcache
+
+# Test artefacts
+test_reports/
+tests/
+**/coverage/
+
+# Emergent / local only
+memory/
+design_guidelines.json
+scripts/
+README.md
+
+# Logs
+*.log
+logs/

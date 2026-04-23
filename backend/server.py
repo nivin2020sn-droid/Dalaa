@@ -610,6 +610,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ============ SERVE FRONTEND (for production single-service deployment) ============
+# When STATIC_DIR is set (in Docker/production), serve the built React app so
+# everything runs under ONE domain. In dev (Emergent), STATIC_DIR is not set,
+# and the frontend is served separately on port 3000.
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi import HTTPException as _HTTPException
+
+_static_dir_env = os.environ.get("STATIC_DIR")
+if _static_dir_env:
+    _static_dir = Path(_static_dir_env)
+    if _static_dir.exists() and (_static_dir / "index.html").exists():
+        # CRA puts hashed JS/CSS under /static/*
+        _assets_dir = _static_dir / "static"
+        if _assets_dir.exists():
+            app.mount("/static", StaticFiles(directory=str(_assets_dir)), name="assets")
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def _spa_fallback(full_path: str):
+            if full_path.startswith("api"):
+                raise _HTTPException(status_code=404, detail="Not found")
+            candidate = _static_dir / full_path
+            if candidate.is_file():
+                return FileResponse(str(candidate))
+            return FileResponse(str(_static_dir / "index.html"))
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
