@@ -7,8 +7,13 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
-import { Sparkles, Upload, Trash2 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "../components/ui/alert-dialog";
+import { Sparkles, Upload, Trash2, Download, CloudUpload, Database } from "lucide-react";
 import { toast } from "sonner";
+import { exportBackup, restoreFromFile } from "../services/backup";
 
 export default function Settings() {
   const { settings, reload } = useSettings();
@@ -16,6 +21,10 @@ export default function Settings() {
   const [form, setForm] = useState(settings);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
+  const backupFileRef = useRef(null);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [restoring, setRestoring] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     setForm(settings);
@@ -181,6 +190,119 @@ export default function Settings() {
           {saving ? "جاري الحفظ..." : "حفظ التغييرات"}
         </Button>
       </div>
+
+      {/* Backup & Restore */}
+      <Card className="p-6 rounded-2xl card-ambient mt-8 space-y-5" data-testid="backup-card">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+            <Database size={20} strokeWidth={1.75} />
+          </div>
+          <div>
+            <h3 className="font-heading font-bold text-lg leading-tight">النسخ الاحتياطي والاستعادة</h3>
+            <p className="text-xs text-muted-foreground mt-1">احفظ بياناتك على Google Drive أو أي مكان آمن</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto py-4 justify-start gap-3"
+            disabled={exporting}
+            onClick={async () => {
+              setExporting(true);
+              try {
+                const res = await exportBackup();
+                toast.success(`تم تصدير ${res.records} سجل — اختر "حفظ على Drive" من القائمة`);
+              } catch (e) {
+                toast.error(e?.message || "فشل التصدير");
+              } finally {
+                setExporting(false);
+              }
+            }}
+            data-testid="export-backup-button"
+          >
+            <CloudUpload size={20} className="shrink-0 text-primary" />
+            <div className="text-right">
+              <div className="font-bold text-sm">{exporting ? "جاري..." : "حفظ نسخة احتياطية"}</div>
+              <div className="text-xs text-muted-foreground">JSON → Drive / Dropbox / Email</div>
+            </div>
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto py-4 justify-start gap-3"
+            onClick={() => backupFileRef.current?.click()}
+            data-testid="import-backup-button"
+          >
+            <Download size={20} className="shrink-0 text-accent" />
+            <div className="text-right">
+              <div className="font-bold text-sm">استعادة نسخة احتياطية</div>
+              <div className="text-xs text-muted-foreground">اختر ملف JSON من جهازك</div>
+            </div>
+          </Button>
+          <input
+            ref={backupFileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) setPendingFile(f);
+              e.target.value = "";
+            }}
+            data-testid="backup-file-input"
+          />
+        </div>
+
+        <div className="text-xs text-muted-foreground bg-secondary/50 rounded-lg p-3 leading-relaxed">
+          💡 النسخة تحتوي على: كل المنتجات، الخدمات، العملاء، المواعيد، الفواتير، المصاريف، المستخدمين، وإعدادات المحل.
+          البيانات محفوظة محلياً على الجهاز فقط — ننصح بأخذ نسخة احتياطية دورية.
+        </div>
+      </Card>
+
+      {/* Restore confirmation dialog */}
+      <AlertDialog open={!!pendingFile} onOpenChange={(o) => { if (!o) setPendingFile(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-heading">⚠️ تأكيد الاستعادة</AlertDialogTitle>
+            <AlertDialogDescription className="leading-relaxed">
+              سيتم <b>مسح كل البيانات الحالية</b> واستبدالها ببيانات الملف:
+              <br />
+              <span className="font-mono text-xs text-foreground/80">{pendingFile?.name}</span>
+              <br /><br />
+              هل أنت متأكد من المتابعة؟ هذا الإجراء لا يمكن التراجع عنه.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="restore-cancel-button">إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={restoring}
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!pendingFile) return;
+                setRestoring(true);
+                try {
+                  const res = await restoreFromFile(pendingFile);
+                  toast.success(`تم استعادة ${res.records} سجل بنجاح`);
+                  setPendingFile(null);
+                  // Reload the app so every page re-fetches fresh data
+                  setTimeout(() => window.location.reload(), 800);
+                } catch (err) {
+                  toast.error(err?.message || "فشل الاستعادة");
+                } finally {
+                  setRestoring(false);
+                }
+              }}
+              className="bg-destructive hover:bg-destructive/90"
+              data-testid="restore-confirm-button"
+            >
+              {restoring ? "جاري الاستعادة..." : "نعم، استبدل البيانات"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
