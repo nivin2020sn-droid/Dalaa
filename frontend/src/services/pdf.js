@@ -142,15 +142,63 @@ export async function shareInvoiceToWhatsApp(domNode, filename, phone, messageTe
     window.open(waUrl, "_blank", "noopener");
   }
 }
-export async function emailInvoicePdf(domNode, filename, recipientHint) {
-  if (Capacitor.isNativePlatform()) {
-    // Same flow — user picks Gmail from the share sheet
-    return await exportInvoiceToPdf(domNode, filename);
+/**
+ * Share an invoice PDF via email.
+ *
+ * - On native (Android/iOS): generates PDF, opens the system share sheet with
+ *   the PDF attached + subject/body prefilled. User picks Gmail / any mail app.
+ * - On web: downloads the PDF and opens `mailto:` with prefilled subject/body,
+ *   so user attaches the downloaded file manually.
+ */
+export async function shareInvoiceByEmail(domNode, filename, recipientEmail, subject, body) {
+  if (!domNode) throw new Error("Invoice DOM node not found");
+
+  const canvas = await html2canvas(domNode, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: "#ffffff",
+    logging: false,
+  });
+  const imgData = canvas.toDataURL("image/png");
+
+  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 8;
+  const usableWidth = pageWidth - margin * 2;
+  const usableHeight = pageHeight - margin * 2;
+
+  const imgProps = pdf.getImageProperties(imgData);
+  let imgWidth = usableWidth;
+  let imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+  if (imgHeight > usableHeight) {
+    imgHeight = usableHeight;
+    imgWidth = (imgProps.width * imgHeight) / imgProps.height;
   }
-  const fullname = (filename || "invoice") + ".pdf";
-  await exportInvoiceToPdf(domNode, fullname);
-  const mailto = `mailto:${recipientHint || ""}?subject=${encodeURIComponent("فاتورة / Rechnung " + (filename || ""))}&body=${encodeURIComponent("مرفق ملف الفاتورة — Siehe Anhang.")}`;
-  window.location.href = mailto;
+  const xOff = (pageWidth - imgWidth) / 2;
+  pdf.addImage(imgData, "PNG", xOff, margin, imgWidth, imgHeight);
+
+  const safeFilename = (filename || "invoice") + ".pdf";
+
+  if (Capacitor.isNativePlatform()) {
+    const base64 = pdf.output("datauristring").split(",")[1];
+    const result = await Filesystem.writeFile({
+      path: safeFilename,
+      data: base64,
+      directory: Directory.Cache,
+    });
+    await Share.share({
+      title: subject || safeFilename,
+      text: body || "",
+      url: result.uri,
+      dialogTitle: "E-Mail / البريد",
+    });
+  } else {
+    // Web: trigger the download, then open mailto: in a new tab.
+    pdf.save(safeFilename);
+    const mailto = `mailto:${encodeURIComponent(recipientEmail || "")}?subject=${encodeURIComponent(subject || safeFilename)}&body=${encodeURIComponent(body || "")}`;
+    window.location.href = mailto;
+  }
 }
 
 /**

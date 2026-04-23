@@ -6,8 +6,8 @@ import { useSettings } from "../context/SettingsContext";
 import { useI18n } from "../i18n/I18nContext";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Printer, ArrowRight, ArrowLeft, Sparkles, FileDown, Ban, MessageCircle } from "lucide-react";
-import { exportInvoiceToPdf, shareInvoiceToWhatsApp } from "../services/pdf";
+import { Printer, ArrowRight, ArrowLeft, Sparkles, FileDown, Ban, MessageCircle, Mail } from "lucide-react";
+import { exportInvoiceToPdf, shareInvoiceToWhatsApp, shareInvoiceByEmail } from "../services/pdf";
 import { toast } from "sonner";
 
 const payLabels = {
@@ -40,6 +40,36 @@ export default function InvoiceView() {
       toast.success("PDF " + (lang === "de" ? "bereit" : "جاهز"));
     } catch (e) {
       toast.error(e?.message || "PDF error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleEmail = async () => {
+    let email = "";
+    if (inv.customer_id) {
+      try {
+        const r = await api.get(`/customers`);
+        const c = (r.data || []).find((x) => x.id === inv.customer_id);
+        if (c?.email) email = c.email;
+      } catch { /* ignore */ }
+    }
+    const entered = window.prompt(
+      lang === "de" ? "E-Mail-Adresse des Kunden:" : "البريد الإلكتروني للعميل:",
+      email || "",
+    );
+    if (entered === null) return; // user cancelled
+    setBusy(true);
+    try {
+      const subject = lang === "de"
+        ? `Rechnung ${inv.invoice_number} — ${settings.shop_name}`
+        : `فاتورة رقم ${inv.invoice_number} — ${settings.shop_name}`;
+      const body = lang === "de"
+        ? `Sehr geehrter Kunde,\n\nim Anhang finden Sie die Rechnung ${inv.invoice_number} über ${fmtEUR(inv.total)}.\n\nVielen Dank für Ihren Besuch!\n${settings.shop_name}`
+        : `عزيزنا العميل،\n\nمرفق فاتورتكم رقم ${inv.invoice_number} بقيمة ${fmtEUR(inv.total)}.\n\nشكراً لزيارتكم!\n${settings.shop_name}`;
+      await shareInvoiceByEmail(printRef.current, inv.invoice_number, entered, subject, body);
+    } catch (e) {
+      toast.error(e?.message || "Email error");
     } finally {
       setBusy(false);
     }
@@ -125,6 +155,15 @@ export default function InvoiceView() {
             data-testid="whatsapp-invoice-button"
           >
             <MessageCircle size={16} className="mx-1" /> {lang === "de" ? "WhatsApp" : "واتساب"}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11"
+            onClick={handleEmail}
+            disabled={busy}
+            data-testid="email-invoice-button"
+          >
+            <Mail size={16} className="mx-1" /> {lang === "de" ? "E-Mail" : "بريد"}
           </Button>
           {!isReversal && (
             <Button variant="destructive" className="h-11" onClick={handleStorno} disabled={busy} data-testid="storno-from-view-button">
