@@ -62,6 +62,25 @@ export async function requireAdmin() {
   return u;
 }
 
+/**
+ * Only the hidden master developer account may pass.
+ * Used to guard settings pages that expose TSE keys, backup configuration
+ * and other technically sensitive fields.
+ */
+export async function requireMaster() {
+  const u = await currentUser();
+  if (!u || u.role !== "master") {
+    const err = new Error("Master developer account required");
+    err.response = { status: 403, data: { detail: "هذه الإعدادات متاحة فقط لحساب مصمم البرنامج" } };
+    throw err;
+  }
+  return u;
+}
+
+export function isMasterUser(user) {
+  return !!user && user.role === "master";
+}
+
 export async function registerUser(body) {
   await requireAdmin();
   const username = (body.username ?? body.email ?? "").trim();

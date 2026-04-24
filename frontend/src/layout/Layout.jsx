@@ -13,13 +13,15 @@ import {
   Sparkles,
   Settings as SettingsIcon,
   Languages,
+  UserCog,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../context/SettingsContext";
 import { useI18n } from "../i18n/I18nContext";
 import { Button } from "../components/ui/button";
 
-const NAV = [
+// Items that every logged-in user sees.
+const BASE_NAV = [
   { to: "/dashboard", tk: "nav.dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
   { to: "/pos", tk: "nav.pos", icon: ShoppingCart, testid: "nav-pos" },
   { to: "/appointments", tk: "nav.appointments", icon: CalendarDays, testid: "nav-appointments" },
@@ -29,14 +31,28 @@ const NAV = [
   { to: "/customers", tk: "nav.customers", icon: Users, testid: "nav-customers" },
   { to: "/expenses", tk: "nav.expenses", icon: Wallet, testid: "nav-expenses" },
   { to: "/reports", tk: "nav.reports", icon: TrendingUp, testid: "nav-reports" },
-  { to: "/settings", tk: "nav.settings", icon: SettingsIcon, testid: "nav-settings" },
 ];
+
+// Item shown only to the Master Developer account — holds all the
+// technical/sensitive settings (TSE, backup, login background…).
+const MASTER_NAV = { to: "/settings", tk: "nav.settings", icon: SettingsIcon, testid: "nav-settings" };
+
+// Item shown to every user — lightweight "My Account" (password change only).
+const ACCOUNT_NAV = { to: "/account", tkAr: "حسابي", tkDe: "Mein Konto", icon: UserCog, testid: "nav-account" };
 
 export default function Layout() {
   const { user, logout } = useAuth();
   const { settings } = useSettings();
   const { t, lang, setLang, dir } = useI18n();
   const navigate = useNavigate();
+
+  // Compose the nav: base items + either Account (admin) or Settings (master).
+  const isMaster = user?.role === "master";
+  const NAV = [
+    ...BASE_NAV,
+    { ...ACCOUNT_NAV, tk: null, label: lang === "de" ? ACCOUNT_NAV.tkDe : ACCOUNT_NAV.tkAr },
+    ...(isMaster ? [MASTER_NAV] : []),
+  ];
 
   const handleLogout = () => {
     logout();
@@ -87,7 +103,7 @@ export default function Layout() {
                 }
               >
                 <Icon size={18} strokeWidth={1.5} />
-                <span>{t(item.tk)}</span>
+                <span>{item.tk ? t(item.tk) : item.label}</span>
               </NavLink>
             );
           })}
@@ -163,7 +179,7 @@ export default function Layout() {
                     }`
                   }
                 >
-                  <Icon size={14} /> {t(item.tk)}
+                  <Icon size={14} /> {item.tk ? t(item.tk) : item.label}
                 </NavLink>
               );
             })}

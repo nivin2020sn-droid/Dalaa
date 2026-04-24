@@ -5,7 +5,7 @@ import { useSettings } from "../context/SettingsContext";
 import { useI18n } from "../i18n/I18nContext";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { ArrowRight, ArrowLeft, FileDown, Printer } from "lucide-react";
+import { ArrowRight, ArrowLeft, FileDown, Printer, Archive } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { exportInvoiceToPdf } from "../services/pdf";
 import { toast } from "sonner";
@@ -61,6 +61,48 @@ export default function YearlyTaxReport() {
     window.print();
   };
 
+  /**
+   * Download DSFinV-K archive from the TSE backend. DSFinV-K is the
+   * official interchange format the German tax office expects for a
+   * cash-register export. The backend streams a ZIP; we hand it to
+   * the user via the share sheet on Android or a normal download on web.
+   */
+  const handleDsfinvkExport = async () => {
+    const tseCfg = settings?.tse;
+    if (!tseCfg?.backend_url) {
+      toast.error(lang === "de"
+        ? "TSE Backend URL nicht konfiguriert (Einstellungen → TSE)"
+        : "لم يُضبط رابط Backend الخاص بـ TSE (الإعدادات → TSE)");
+      return;
+    }
+    setBusy(true);
+    try {
+      const from = `${year}-01-01`;
+      const to   = `${year}-12-31`;
+      const url = `${tseCfg.backend_url.replace(/\/+$/, "")}/api/tse/export-dsfinvk?from=${from}&to=${to}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const filename = `DSFinV-K_${year}.zip`;
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objUrl);
+      toast.success(lang === "de" ? "DSFinV-K heruntergeladen" : "تم تنزيل DSFinV-K");
+    } catch (e) {
+      toast.error((lang === "de" ? "DSFinV-K fehlgeschlagen: " : "فشل تصدير DSFinV-K: ") + (e?.message || ""));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) return <div className="text-muted-foreground">{t("common.loading")}</div>;
   if (!data) return null;
 
@@ -86,6 +128,16 @@ export default function YearlyTaxReport() {
           </Button>
           <Button className="h-11" onClick={handlePdf} disabled={busy} data-testid="pdf-yearly-button">
             <FileDown size={16} className="mx-1" /> PDF
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11"
+            onClick={handleDsfinvkExport}
+            disabled={busy}
+            data-testid="dsfinvk-export-button"
+          >
+            <Archive size={16} className="mx-1" />
+            {lang === "de" ? "DSFinV-K Export" : "تصدير DSFinV-K"}
           </Button>
         </div>
       </div>

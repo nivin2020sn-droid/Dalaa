@@ -12,10 +12,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages, Image as ImageIcon, UserCog, KeyRound, ShieldCheck, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
+import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages, Image as ImageIcon, UserCog, KeyRound, ShieldCheck, AlertTriangle, CheckCircle2, RefreshCw, Timer, PlayCircle } from "lucide-react";
 import { testConnection as tseTestConnection, isTseConfigured } from "../services/tse";
 import { toast } from "sonner";
-import { exportBackup, restoreFromFile } from "../services/backup";
+import { exportBackup, restoreFromFile, runBackup } from "../services/backup";
 
 export default function Settings() {
   const { settings, reload } = useSettings();
@@ -54,7 +54,19 @@ export default function Settings() {
     if (settings?.tse) {
       setTse((prev) => ({ ...prev, ...settings.tse }));
     }
+    if (settings?.backup) {
+      setBackupCfg((prev) => ({ ...prev, ...settings.backup }));
+    }
   }, [settings]);
+
+  // Auto-backup state
+  const [backupCfg, setBackupCfg] = useState({
+    enabled: true,
+    auto_interval_minutes: 60,
+    folder_subpath: "Dalaa/Backups",
+  });
+  const [savingBackup, setSavingBackup] = useState(false);
+  const [runningBackup, setRunningBackup] = useState(false);
 
   const isAdmin = user?.role === "admin";
 
@@ -728,6 +740,153 @@ export default function Settings() {
           {saving ? t("set.saving") : t("set.save_changes")}
         </Button>
       </div>
+
+      {/* Auto-Backup configuration (Master only — hidden from admin via route guard) */}
+      <Card className="p-6 rounded-2xl card-ambient mt-8 space-y-4" data-testid="auto-backup-card">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-700 flex items-center justify-center">
+            <Timer size={20} strokeWidth={1.75} />
+          </div>
+          <div>
+            <h3 className="font-heading font-bold text-lg leading-tight">
+              {lang === "de" ? "Automatische Sicherung" : "النسخ الاحتياطي التلقائي"}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {lang === "de" ? "Stündlich, nummeriert, lokal gespeichert" : "كل ساعة، رقم تسلسلي، حفظ محلي"}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <Label>{lang === "de" ? "Aktiviert" : "تفعيل"}</Label>
+            <select
+              value={backupCfg.enabled ? "yes" : "no"}
+              onChange={(e) => setBackupCfg({ ...backupCfg, enabled: e.target.value === "yes" })}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              data-testid="backup-enabled-select"
+            >
+              <option value="yes">{lang === "de" ? "Ein" : "مفعّل"}</option>
+              <option value="no">{lang === "de" ? "Aus" : "متوقف"}</option>
+            </select>
+          </div>
+          <div>
+            <Label>{lang === "de" ? "Intervall (Minuten)" : "الفاصل الزمني (دقائق)"}</Label>
+            <Input
+              type="number" min="5"
+              value={backupCfg.auto_interval_minutes}
+              onChange={(e) => setBackupCfg({ ...backupCfg, auto_interval_minutes: Number(e.target.value) || 60 })}
+              data-testid="backup-interval-input"
+            />
+          </div>
+          <div>
+            <Label>{lang === "de" ? "Ordner-Pfad" : "مسار مجلد النسخ"}</Label>
+            <Input
+              value={backupCfg.folder_subpath}
+              onChange={(e) => setBackupCfg({ ...backupCfg, folder_subpath: e.target.value })}
+              placeholder="Dalaa/Backups"
+              autoCapitalize="none"
+              spellCheck={false}
+              data-testid="backup-folder-input"
+            />
+          </div>
+        </div>
+
+        <div className="text-[11px] text-muted-foreground leading-relaxed">
+          {lang === "de"
+            ? "Speicherort auf Android: interner App-Dokumentenordner. Der Pfad oben ist relativ dazu. Dateien werden automatisch mit fortlaufender Nummer benannt: backup_000001_YYYY-MM-DD_HH-MM.db."
+            : "يُحفظ على Android داخل مجلد الوثائق الخاص بالتطبيق. المسار أعلاه نسبي داخله. الملفات تُسمى تلقائياً بصيغة: backup_000001_YYYY-MM-DD_HH-MM.db."}
+        </div>
+
+        {/* Last backup status read-out */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
+          <div className="rounded-lg border border-border bg-secondary/30 p-2.5">
+            <div className="text-muted-foreground">{lang === "de" ? "Letzte Sicherung" : "آخر نسخة احتياطية"}</div>
+            {settings?.backup?.last_at ? (
+              <div className="mt-0.5">
+                <div className="font-mono font-bold">#{String(settings.backup.last_number || 0).padStart(6, "0")}</div>
+                <div className="text-muted-foreground">{new Date(settings.backup.last_at).toLocaleString(lang === "de" ? "de-DE" : "ar-EG")}</div>
+                {settings.backup.last_filename && (
+                  <div className="text-muted-foreground font-mono text-[10px] truncate">{settings.backup.last_filename}</div>
+                )}
+              </div>
+            ) : <div className="text-muted-foreground mt-0.5">—</div>}
+          </div>
+          <div className="rounded-lg border border-border bg-secondary/30 p-2.5">
+            <div className="text-muted-foreground">{lang === "de" ? "Status" : "الحالة"}</div>
+            {settings?.backup?.last_status === "success" ? (
+              <div className="mt-0.5 text-emerald-700 font-bold">✓ {lang === "de" ? "Erfolgreich" : "ناجحة"}</div>
+            ) : settings?.backup?.last_status === "failed" ? (
+              <div className="mt-0.5 text-rose-600 font-bold">✗ {lang === "de" ? "Fehlgeschlagen" : "فشلت"}</div>
+            ) : (
+              <div className="text-muted-foreground mt-0.5">—</div>
+            )}
+            {settings?.backup?.last_error && (
+              <div className="text-rose-600 text-[10px] mt-0.5 break-words">{settings.backup.last_error}</div>
+            )}
+          </div>
+          <div className="rounded-lg border border-border bg-secondary/30 p-2.5">
+            <div className="text-muted-foreground">{lang === "de" ? "Letzte Auto-Sicherung" : "آخر نسخة تلقائية"}</div>
+            <div className="mt-0.5 font-semibold">
+              {settings?.backup?.last_auto_at
+                ? new Date(settings.backup.last_auto_at).toLocaleString(lang === "de" ? "de-DE" : "ar-EG")
+                : "—"}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button
+            type="button"
+            className="h-11"
+            disabled={runningBackup}
+            onClick={async () => {
+              setRunningBackup(true);
+              try {
+                const r = await runBackup({ trigger: "manual", share: false });
+                toast.success(
+                  (lang === "de" ? "Sicherung #" : "نسخة احتياطية #") +
+                  String(r.number).padStart(6, "0") +
+                  " — " + r.records + (lang === "de" ? " Datensätze" : " سجل"),
+                );
+                await reload();
+              } catch (e) {
+                toast.error(e?.message || "Backup failed");
+              } finally {
+                setRunningBackup(false);
+              }
+            }}
+            data-testid="backup-now-button"
+          >
+            <PlayCircle size={16} className="mx-1" />
+            {runningBackup
+              ? (lang === "de" ? "Sichert…" : "يُنشئ نسخة…")
+              : (lang === "de" ? "Backup Now" : "نسخة احتياطية الآن")}
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11"
+            disabled={savingBackup}
+            onClick={async () => {
+              setSavingBackup(true);
+              try {
+                await api.put("/settings", { backup: { ...(settings?.backup || {}), ...backupCfg } });
+                await reload();
+                toast.success(lang === "de" ? "Backup-Einstellungen gespeichert" : "تم حفظ إعدادات النسخ الاحتياطي");
+              } catch (e) {
+                toast.error(e?.response?.data?.detail || "Error");
+              } finally {
+                setSavingBackup(false);
+              }
+            }}
+            data-testid="save-backup-cfg-button"
+          >
+            {savingBackup ? t("common.loading") : (lang === "de" ? "Einstellungen speichern" : "حفظ الإعدادات")}
+          </Button>
+        </div>
+      </Card>
 
       {/* Backup & Restore */}
       <Card className="p-6 rounded-2xl card-ambient mt-8 space-y-5" data-testid="backup-card">
