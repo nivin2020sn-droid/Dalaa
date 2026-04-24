@@ -54,6 +54,23 @@ jobs:
             npx cap add android
           fi
 
+      - name: Declare storage permissions in AndroidManifest.xml
+        working-directory: frontend
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q "android.permission.WRITE_EXTERNAL_STORAGE" "$MANIFEST"; then
+            python3 -c "
+          import pathlib, re
+          p = pathlib.Path('android/app/src/main/AndroidManifest.xml')
+          t = p.read_text()
+          perms = '    <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\"/>\n    <uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" android:maxSdkVersion=\"28\"/>\n'
+          t = re.sub(r'</manifest>\s*$', perms + '</manifest>\n', t)
+          p.write_text(t)
+          print('Patched AndroidManifest.xml with storage permissions')
+          "
+          fi
+          grep -n "uses-permission" android/app/src/main/AndroidManifest.xml || true
+
       - name: Generate Android icons & splash
         working-directory: frontend
         run: npx capacitor-assets generate --android --iconBackgroundColor '#ffffff' --splashBackgroundColor '#ffffff' || echo "assets generation failed — continuing with default icons"

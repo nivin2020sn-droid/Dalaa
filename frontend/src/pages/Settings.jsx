@@ -63,7 +63,7 @@ export default function Settings() {
   const [backupCfg, setBackupCfg] = useState({
     enabled: true,
     auto_interval_minutes: 60,
-    folder_subpath: "Dalaa/Backups",
+    folder_subpath: "Dalaa-beauty",
   });
   const [savingBackup, setSavingBackup] = useState(false);
   const [runningBackup, setRunningBackup] = useState(false);
@@ -811,6 +811,18 @@ export default function Settings() {
                 {settings.backup.last_filename && (
                   <div className="text-muted-foreground font-mono text-[10px] truncate">{settings.backup.last_filename}</div>
                 )}
+                {settings.backup.last_uri && (
+                  <div className="text-emerald-700 font-mono text-[10px] break-all mt-1" title={settings.backup.last_uri}>
+                    📂 {settings.backup.last_uri}
+                  </div>
+                )}
+                {settings.backup.last_storage && (
+                  <div className="text-muted-foreground text-[10px] mt-0.5">
+                    {settings.backup.last_storage === "external_public" && (lang === "de" ? "Öffentlicher Speicher (sichtbar im Dateimanager)" : "مخزن عام (مرئي في مدير الملفات)")}
+                    {settings.backup.last_storage === "documents_scoped" && (lang === "de" ? "App-Speicher: Android/data/…/Documents" : "مخزن التطبيق: Android/data/…/Documents")}
+                    {settings.backup.last_storage === "data_private" && (lang === "de" ? "Privater App-Speicher" : "مخزن التطبيق الخاص")}
+                  </div>
+                )}
               </div>
             ) : <div className="text-muted-foreground mt-0.5">—</div>}
           </div>
@@ -850,10 +862,11 @@ export default function Settings() {
                   (lang === "de" ? "Sicherung #" : "نسخة احتياطية #") +
                   String(r.number).padStart(6, "0") +
                   " — " + r.records + (lang === "de" ? " Datensätze" : " سجل"),
+                  { description: r.uri || r.filename, duration: 7000 },
                 );
                 await reload();
               } catch (e) {
-                toast.error(e?.message || "Backup failed");
+                toast.error(e?.message || "Backup failed", { duration: 9000 });
               } finally {
                 setRunningBackup(false);
               }

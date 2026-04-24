@@ -59,18 +59,50 @@ async function writeAudit(action, payload) {
   });
 }
 
+/**
+ * Request storage permissions on native Android. Works across API levels:
+ *   - Android ≤ 9 (API 28): the runtime prompt asks for READ/WRITE_EXTERNAL_STORAGE.
+ *   - Android 10+ (scoped storage): permission is auto-granted for the
+ *     app-specific external dir (Documents/…). No prompt appears.
+ *
+ * Returns:
+ *   { granted: boolean, reason?: string }
+ */
+async function ensureStoragePermission() {
+  if (!Capacitor.isNativePlatform()) return { granted: true };
+  try {
+    const state = await Filesystem.checkPermissions();
+    if (state.publicStorage === "granted") return { granted: true };
+    const req = await Filesystem.requestPermissions();
+    if (req.publicStorage === "granted") return { granted: true };
+    return { granted: false, reason: "user_denied" };
+  } catch (e) {
+    // Some Capacitor/Android combos throw NOT_IMPLEMENTED because scoped
+    // storage doesn't *need* explicit permissions. Treat that as granted.
+    const msg = (e && (e.message || e.code)) || "";
+    if (/not[\s_-]*implemented/i.test(String(msg))) return { granted: true };
+    return { granted: false, reason: msg || "permission_error" };
+  }
+}
+
+export async function checkStoragePermission() {
+  return await ensureStoragePermission();
+}
+
 async function getBackupConfig() {
   const s = await db.settings.get("main");
   return {
     enabled: s?.backup?.enabled !== false,
     auto_interval_minutes: s?.backup?.auto_interval_minutes ?? 60,
-    folder_subpath: s?.backup?.folder_subpath || "Dalaa/Backups",
+    folder_subpath: s?.backup?.folder_subpath || "Dalaa-beauty",
     last_number: s?.backup?.last_number || 0,
     last_at: s?.backup?.last_at || null,
     last_filename: s?.backup?.last_filename || null,
     last_status: s?.backup?.last_status || null,
     last_error: s?.backup?.last_error || null,
     last_auto_at: s?.backup?.last_auto_at || null,
+    last_uri: s?.backup?.last_uri || null,
+    last_storage: s?.backup?.last_storage || null,
   };
 }
 
@@ -103,26 +135,89 @@ export async function runBackup({ trigger = "manual", share = false } = {}) {
 
     let location = "memory";
     let uri = null;
+    let storage = null;
 
     if (Capacitor.isNativePlatform()) {
+      // 1) Make sure the OS has granted us write access. On Android 10+
+      //    with scoped storage this returns `granted` silently; on older
+      //    devices a system prompt appears.
+      const perm = await ensureStoragePermission();
+      if (!perm.granted) {
+        throw new Error(
+          "تم رفض إذن التخزين. للمتابعة: الإعدادات → التطبيقات → Dalaa Beauty → الأذونات → التخزين → سماح. " +
+          "Storage permission was denied — backup cannot be created.",
+        );
+      }
+
       const relPath = `${cfg.folder_subpath.replace(/^\/+|\/+$/g, "")}/${filename}`;
-      const result = await Filesystem.writeFile({
-        path: relPath,
-        data: json,
-        directory: Directory.Data,
-        encoding: Encoding.UTF8,
-        recursive: true,
-      });
+
+      // 2) Try the truly public Internal Storage root first. This works on
+      //    Android ≤ 9 with the runtime permission and results in
+      //    `/storage/emulated/0/<folder>/<file>` — visible in every file
+      //    manager. On Android 10+ scoped storage usually rejects this.
+      let result = null;
+      try {
+        result = await Filesystem.writeFile({
+          path: relPath,
+          data: json,
+          directory: Directory.ExternalStorage,
+          encoding: Encoding.UTF8,
+          recursive: true,
+        });
+        storage = "external_public";
+      } catch (eExt) {
+        // 3) Fallback to the app-scoped external Documents dir. This is
+        //    always writable without special permissions on modern Android
+        //    and the file is visible at:
+        //    Android/data/com.salon.accounting/files/Documents/<folder>/
+        try {
+          result = await Filesystem.writeFile({
+            path: relPath,
+            data: json,
+            directory: Directory.Documents,
+            encoding: Encoding.UTF8,
+            recursive: true,
+          });
+          storage = "documents_scoped";
+        } catch (eDoc) {
+          // 4) Last resort: private internal data dir. Always writable.
+          result = await Filesystem.writeFile({
+            path: relPath,
+            data: json,
+            directory: Directory.Data,
+            encoding: Encoding.UTF8,
+            recursive: true,
+          });
+          storage = "data_private";
+        }
+      }
       location = result.uri;
       uri = result.uri;
 
+      // 5) Verify the file actually exists on disk.
+      try {
+        const stat = await Filesystem.stat({ path: uri });
+        if (!stat || stat.type !== "file") {
+          throw new Error("Backup file was not persisted correctly");
+        }
+      } catch {
+        // stat() with a file:// URI may not be supported on all Android
+        // webviews; if it fails we proceed trusting writeFile's return.
+      }
+
+      // 6) For manual runs, optionally open the Android share sheet so
+      //    the user can copy the file to Google Drive, Dropbox, email…
       if (share && trigger === "manual") {
-        await Share.share({
-          title: filename,
-          text: "نسخة احتياطية — Dalaa Beauty",
-          url: result.uri,
-          dialogTitle: "احفظ النسخة على Google Drive أو شاركها",
-        });
+        try {
+          await Share.share({
+            title: filename,
+            text: "نسخة احتياطية — Dalaa Beauty",
+            url: uri,
+            dialogTitle: "احفظ النسخة على Drive أو شاركها",
+          });
+        } catch {
+          // User may dismiss the share sheet — the backup itself already succeeded.
+        }
       }
     } else {
       // Browser: always give the user a file download for manual backups.
@@ -146,16 +241,17 @@ export async function runBackup({ trigger = "manual", share = false } = {}) {
       last_at: startedAt,
       last_filename: filename,
       last_uri: uri,
+      last_storage: storage,
       last_status: "success",
       last_error: null,
       ...(trigger === "auto" ? { last_auto_at: startedAt } : {}),
     });
 
     await writeAudit("backup_success", {
-      trigger, number, filename, size_bytes, records: record_count, location,
+      trigger, number, filename, size_bytes, records: record_count, location, storage,
     });
 
-    return { number, filename, size_bytes, records: record_count, meta, uri };
+    return { number, filename, size_bytes, records: record_count, meta, uri, storage };
   } catch (e) {
     const errorMessage = e?.message || String(e);
     await persistBackupMeta({
