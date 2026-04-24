@@ -12,7 +12,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages, Image as ImageIcon, UserCog, KeyRound } from "lucide-react";
+import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages, Image as ImageIcon, UserCog, KeyRound, ShieldCheck, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
+import { testConnection as tseTestConnection, isTseConfigured } from "../services/tse";
 import { toast } from "sonner";
 import { exportBackup, restoreFromFile } from "../services/backup";
 
@@ -34,8 +35,25 @@ export default function Settings() {
   const [pwd, setPwd] = useState({ current_password: "", new_password: "", confirm: "" });
   const [savingPwd, setSavingPwd] = useState(false);
 
+  // TSE / KassenSichV settings state
+  const [tse, setTse] = useState({
+    backend_url: "",
+    provider: "fiskaly",
+    environment: "sandbox",
+    client_id: "",
+    tss_id: "",
+    cash_register_name: "Kasse-01",
+    store_name: "Dalaa Beauty",
+  });
+  const [savingTse, setSavingTse] = useState(false);
+  const [testingTse, setTestingTse] = useState(false);
+  const [tseStatus, setTseStatus] = useState({ connected: null, latency_ms: null, error: null, checked_at: null });
+
   useEffect(() => {
     setForm(settings);
+    if (settings?.tse) {
+      setTse((prev) => ({ ...prev, ...settings.tse }));
+    }
   }, [settings]);
 
   const isAdmin = user?.role === "admin";
@@ -263,6 +281,238 @@ export default function Settings() {
               {savingPwd ? t("common.loading") : (lang === "de" ? "Passwort ändern" : "تغيير كلمة المرور")}
             </Button>
           </div>
+        </div>
+      </Card>
+
+      {/* TSE / KassenSichV — German fiscal compliance */}
+      <Card className="p-6 rounded-2xl card-ambient mb-5 space-y-4" data-testid="tse-card">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
+              <ShieldCheck size={20} strokeWidth={1.75} />
+            </div>
+            <div>
+              <h3 className="font-heading font-bold text-lg leading-tight">
+                TSE / KassenSichV
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {lang === "de"
+                  ? "Deutsche Kassensicherungsverordnung — TSE-Anbindung"
+                  : "إعدادات الامتثال الضريبي الألماني (KassenSichV)"}
+              </p>
+            </div>
+          </div>
+          {/* Live connection status badge */}
+          <div className="flex items-center gap-2">
+            {isTseConfigured(tse) ? (
+              tseStatus.connected === true ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 px-2.5 py-1 text-xs font-bold">
+                  <CheckCircle2 size={12} /> {lang === "de" ? "Verbunden" : "متصل"}
+                </span>
+              ) : tseStatus.connected === false ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-2.5 py-1 text-xs font-bold">
+                  <AlertTriangle size={12} /> {lang === "de" ? "Nicht verbunden" : "غير متصل"}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-secondary text-muted-foreground px-2.5 py-1 text-xs font-bold">
+                  {lang === "de" ? "Nicht geprüft" : "لم يُختبر بعد"}
+                </span>
+              )
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2.5 py-1 text-xs font-bold">
+                {lang === "de" ? "Nicht konfiguriert" : "غير مهيّأ"}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Security disclosure */}
+        <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-[11px] text-blue-900 leading-relaxed">
+          🔒 {lang === "de"
+            ? "Aus Sicherheitsgründen werden keine API-Secrets oder privaten Schlüssel lokal auf dem Gerät gespeichert. Die App spricht ausschließlich mit Ihrem Backend über HTTPS; Fiskaly-Zugangsdaten bleiben auf dem Backend."
+            : "لأسباب أمنية، لا تُخزَّن مفاتيح API السرية أو الكلمات السرية داخل التطبيق. يتصل التطبيق فقط مع Backend الخاص بك عبر HTTPS، وتبقى بيانات Fiskaly السرية على الخادم."}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="md:col-span-2">
+            <Label>Backend API URL <span className="text-xs text-muted-foreground">(HTTPS)</span></Label>
+            <Input
+              type="url"
+              placeholder="https://your-backend.example.com"
+              value={tse.backend_url}
+              onChange={(e) => setTse({ ...tse, backend_url: e.target.value })}
+              autoCapitalize="none"
+              spellCheck={false}
+              data-testid="tse-backend-url-input"
+            />
+          </div>
+
+          <div>
+            <Label>{lang === "de" ? "TSE-Anbieter" : "مزوّد TSE"}</Label>
+            <select
+              value={tse.provider}
+              onChange={(e) => setTse({ ...tse, provider: e.target.value })}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              data-testid="tse-provider-select"
+            >
+              <option value="fiskaly">Fiskaly</option>
+            </select>
+          </div>
+
+          <div>
+            <Label>Environment</Label>
+            <select
+              value={tse.environment}
+              onChange={(e) => setTse({ ...tse, environment: e.target.value })}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              data-testid="tse-environment-select"
+            >
+              <option value="sandbox">Sandbox (Test)</option>
+              <option value="production">Production</option>
+            </select>
+          </div>
+
+          <div>
+            <Label>Client ID</Label>
+            <Input
+              value={tse.client_id}
+              onChange={(e) => setTse({ ...tse, client_id: e.target.value })}
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder="e.g. 8a1c…"
+              data-testid="tse-client-id-input"
+            />
+          </div>
+
+          <div>
+            <Label>TSS ID</Label>
+            <Input
+              value={tse.tss_id}
+              onChange={(e) => setTse({ ...tse, tss_id: e.target.value })}
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder="e.g. 4e9d…"
+              data-testid="tse-tss-id-input"
+            />
+          </div>
+
+          <div>
+            <Label>{lang === "de" ? "Kassen-Name" : "اسم الكاشير"}</Label>
+            <Input
+              value={tse.cash_register_name}
+              onChange={(e) => setTse({ ...tse, cash_register_name: e.target.value })}
+              data-testid="tse-cash-register-input"
+            />
+          </div>
+
+          <div>
+            <Label>{lang === "de" ? "Filiale / Standort" : "اسم الفرع / المحل"}</Label>
+            <Input
+              value={tse.store_name}
+              onChange={(e) => setTse({ ...tse, store_name: e.target.value })}
+              data-testid="tse-store-name-input"
+            />
+          </div>
+        </div>
+
+        {/* Status read-outs */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+          <div className="rounded-lg border border-border bg-secondary/30 p-2.5">
+            <div className="text-muted-foreground">{lang === "de" ? "Letzte TSE-Signatur" : "آخر توقيع TSE"}</div>
+            {settings?.tse?.last_signature_at ? (
+              <div className="mt-0.5">
+                <div className="font-mono font-bold">#{settings.tse.last_signature_counter ?? "—"}</div>
+                <div className="text-muted-foreground">{new Date(settings.tse.last_signature_at).toLocaleString(lang === "de" ? "de-DE" : "ar-EG")}</div>
+                {settings.tse.last_signature_serial && (
+                  <div className="text-muted-foreground font-mono text-[10px] truncate">Serial: {settings.tse.last_signature_serial}</div>
+                )}
+              </div>
+            ) : (
+              <div className="text-muted-foreground mt-0.5">—</div>
+            )}
+          </div>
+          <div className="rounded-lg border border-border bg-secondary/30 p-2.5">
+            <div className="text-muted-foreground">{lang === "de" ? "Letzter TSE-Fehler" : "آخر خطأ TSE"}</div>
+            {settings?.tse?.last_error ? (
+              <div className="mt-0.5">
+                <div className="text-rose-600 font-semibold text-[11px] break-words">{settings.tse.last_error}</div>
+                {settings.tse.last_error_at && (
+                  <div className="text-muted-foreground">{new Date(settings.tse.last_error_at).toLocaleString(lang === "de" ? "de-DE" : "ar-EG")}</div>
+                )}
+              </div>
+            ) : (
+              <div className="text-emerald-700 mt-0.5">✓ {lang === "de" ? "Keine Fehler" : "لا أخطاء"}</div>
+            )}
+          </div>
+        </div>
+
+        {tseStatus.error && (
+          <div className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-xs text-rose-700">
+            <strong>{lang === "de" ? "Verbindungsfehler" : "فشل الاتصال"}:</strong> {tseStatus.error}
+          </div>
+        )}
+
+        {tseStatus.connected === true && tseStatus.latency_ms != null && (
+          <div className="text-[11px] text-emerald-700">
+            ✓ {lang === "de" ? "Latenz" : "زمن الاستجابة"}: {tseStatus.latency_ms}ms
+            {tseStatus.checked_at && <> — {new Date(tseStatus.checked_at).toLocaleTimeString(lang === "de" ? "de-DE" : "ar-EG")}</>}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11"
+            disabled={testingTse || !tse.backend_url}
+            onClick={async () => {
+              setTestingTse(true);
+              setTseStatus({ connected: null, latency_ms: null, error: null, checked_at: null });
+              try {
+                const r = await tseTestConnection(tse);
+                setTseStatus({ connected: true, latency_ms: r.latency_ms ?? null, error: null, checked_at: new Date().toISOString() });
+                toast.success(lang === "de" ? "TSE-Verbindung OK" : "الاتصال بـ TSE ناجح");
+              } catch (err) {
+                setTseStatus({ connected: false, latency_ms: null, error: err?.message || "Error", checked_at: new Date().toISOString() });
+                toast.error(err?.message || "TSE test failed");
+              } finally {
+                setTestingTse(false);
+              }
+            }}
+            data-testid="test-tse-connection-button"
+          >
+            <RefreshCw size={14} className={"mx-1 " + (testingTse ? "animate-spin" : "")} />
+            {testingTse
+              ? (lang === "de" ? "Prüft…" : "يختبر…")
+              : (lang === "de" ? "Test TSE Connection" : "اختبار اتصال TSE")}
+          </Button>
+
+          <Button
+            type="button"
+            className="h-11"
+            disabled={savingTse || !isAdmin}
+            onClick={async () => {
+              setSavingTse(true);
+              try {
+                await api.put("/settings", { tse: { ...(settings?.tse || {}), ...tse } });
+                await reload();
+                toast.success(lang === "de" ? "TSE-Einstellungen gespeichert" : "تم حفظ إعدادات TSE");
+              } catch (err) {
+                toast.error(err?.response?.data?.detail || "Error");
+              } finally {
+                setSavingTse(false);
+              }
+            }}
+            data-testid="save-tse-button"
+          >
+            {savingTse ? t("common.loading") : (lang === "de" ? "TSE-Einstellungen speichern" : "حفظ إعدادات TSE")}
+          </Button>
+        </div>
+
+        <div className="text-[10px] text-muted-foreground leading-relaxed border-t border-border pt-3 mt-1">
+          {lang === "de"
+            ? "Hinweis: Jede Rechnung wird bei aktiver TSE-Konfiguration zuerst vom Backend signiert. Schlägt die Signatur fehl, wird die Rechnung als \"Pending\" gespeichert und NICHT als rechtsgültiger Beleg ausgegeben."
+            : "ملاحظة: عند تفعيل TSE، كل فاتورة تُرسَل أولاً إلى Backend للتوقيع. إذا فشل التوقيع، تُحفَظ كـ \"Pending\" فقط ولا تُعتبر فاتورة رسمية."}
         </div>
       </Card>
 

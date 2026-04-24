@@ -8,6 +8,7 @@ import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Printer, ArrowRight, ArrowLeft, Sparkles, FileDown, Ban, MessageCircle, Mail } from "lucide-react";
 import { exportInvoiceToPdf, shareInvoiceToWhatsApp, shareInvoiceByEmail } from "../services/pdf";
+import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
 
 const payLabels = {
@@ -279,6 +280,39 @@ export default function InvoiceView() {
         <div className="text-center text-[10px] text-muted-foreground border-t border-border pt-2">
           {settings.receipt_footer || t("inv.footer_note")}
         </div>
+
+        {/* TSE / KassenSichV block — printed on the receipt as required */}
+        {(inv.tse_status === "signed" || inv.tse_status === "pending") && (
+          <div className="mt-3 pt-2 border-t border-border">
+            {inv.tse_status === "pending" && (
+              <div className="mb-2 rounded-md bg-amber-50 border border-amber-200 p-2 text-[10px] text-amber-900 font-semibold">
+                ⚠️ {lang === "de"
+                  ? "TSE-Signatur ausstehend — diese Rechnung ist NICHT rechtsgültig, bis die Signatur empfangen wird."
+                  : "توقيع TSE معلّق — هذه الفاتورة ليست رسمية حتى يتم استلام التوقيع."}
+                {inv.tse_error_message && <div className="mt-0.5 font-normal">{inv.tse_error_message}</div>}
+              </div>
+            )}
+            {inv.tse_status === "signed" && (
+              <div className="flex items-start gap-3 text-[10px]">
+                {inv.tse_qr_code ? (
+                  <div className="shrink-0 bg-white p-1 rounded border border-border">
+                    <QRCodeCanvas value={inv.tse_qr_code} size={84} includeMargin={false} />
+                  </div>
+                ) : null}
+                <div className="flex-1 space-y-0.5 text-muted-foreground leading-tight">
+                  <div className="text-emerald-700 font-bold">✓ TSE-signiert (KassenSichV)</div>
+                  {inv.tse_serial && <div className="font-mono break-all">Serial: {inv.tse_serial}</div>}
+                  {inv.tse_counter != null && <div className="font-mono">Signatur-Zähler: {inv.tse_counter}</div>}
+                  {inv.tse_timestamp && (
+                    <div className="font-mono">
+                      {lang === "de" ? "TSE-Zeitstempel" : "طابع الوقت"}: {new Date(inv.tse_timestamp).toLocaleString(lang === "de" ? "de-DE" : "ar-EG")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
     </div>
   );

@@ -1,6 +1,8 @@
 import db from "../db/db";
 import { newId, nowIso } from "../db/seed";
 import { currentUser } from "./auth";
+import { getSettings } from "./settings";
+import { isTseConfigured, signInvoice as tseSignInvoice, signStorno as tseSignStorno, TSE_STATUS } from "./tse";
 
 async function nextInvoiceNumber() {
   const count = await db.invoices.count();
@@ -130,10 +132,105 @@ export async function createInvoice(body) {
     cashier_id: user?.id || "",
     cashier_name: user?.name || "",
     created_at: nowIso(),
+    // --- TSE / KassenSichV envelope (filled below) ---
+    tse_status: TSE_STATUS.NOT_REQUIRED,
+    tse_signature: null,
+    tse_serial: null,
+    tse_counter: null,
+    tse_timestamp: null,
+    tse_qr_code: null,
+    tse_error_message: null,
   };
 
+  // ──────────────────────────────────────────────────────────────────
+  // TSE / KassenSichV signing (German fiscal compliance).
+  // If the merchant has configured a Backend + TSS/Client IDs, we MUST
+  // obtain a TSE signature from the backend BEFORE we commit the invoice
+  // as final. On any failure we still persist the record but mark it as
+  // "pending" so it cannot be treated as a legal receipt yet.
+  // ──────────────────────────────────────────────────────────────────
+  const appSettings = await getSettings();
+  const tseCfg = appSettings?.tse;
+  if (isTseConfigured(tseCfg)) {
+    const payload = {
+      invoice_number: inv.invoice_number,
+      timestamp_client: inv.created_at,
+      payment_method: inv.payment_method,
+      totals: {
+        gross: inv.total,
+        net:   inv.net_total,
+        vat:   inv.vat_total,
+        by_rate: inv.vat_breakdown,
+      },
+      items: inv.items.map((it) => ({
+        name:       it.name,
+        quantity:   it.quantity,
+        unit_price: it.unit_price,
+        vat_rate:   it.vat_rate,
+        total:      it.total,
+      })),
+    };
+    try {
+      const tse = await tseSignInvoice(tseCfg, payload);
+      inv.tse_status    = TSE_STATUS.SIGNED;
+      inv.tse_signature = tse.signature ?? null;
+      inv.tse_serial    = tse.serial    ?? null;
+      inv.tse_counter   = tse.counter   ?? null;
+      inv.tse_timestamp = tse.timestamp ?? null;
+      inv.tse_qr_code   = tse.qr_code   ?? null;
+    } catch (e) {
+      inv.tse_status        = TSE_STATUS.PENDING;
+      inv.tse_error_message = e?.message || "TSE signing failed";
+      // Remember the last error at the settings level so the UI surface
+      // (TSE settings card) can show it without hunting through invoices.
+      await db.settings.put({
+        ...(appSettings || { id: "main" }),
+        id: "main",
+        tse: {
+          ...(tseCfg || {}),
+          last_error: inv.tse_error_message,
+          last_error_at: nowIso(),
+        },
+      });
+    }
+  }
+
   await db.invoices.add(inv);
-  await writeAudit("invoice_create", inv.id, { number: inv.invoice_number, total });
+  await writeAudit(
+    inv.tse_status === TSE_STATUS.SIGNED ? "invoice_create" : "invoice_create_pending_tse",
+    inv.id,
+    { number: inv.invoice_number, total, tse_status: inv.tse_status },
+  );
+
+  // If TSE is required but signing failed, surface the problem to the
+  // caller so the UI can block / warn — invoice stays in DB as "pending".
+  if (inv.tse_status === TSE_STATUS.PENDING) {
+    const err = new Error(
+      "فشل توقيع TSE — تم حفظ الفاتورة كـ Pending ولم تُصدَر رسمياً. " +
+      (inv.tse_error_message || ""),
+    );
+    err.code = "TSE_PENDING";
+    err.invoice = inv;
+    err.response = { status: 502, data: { detail: err.message, invoice: inv } };
+    throw err;
+  }
+
+  // Persist a successful signature summary onto the settings row so the
+  // TSE settings card can show it at a glance.
+  if (inv.tse_status === TSE_STATUS.SIGNED) {
+    await db.settings.put({
+      ...(appSettings || { id: "main" }),
+      id: "main",
+      tse: {
+        ...(tseCfg || {}),
+        last_signature_at:      inv.tse_timestamp || nowIso(),
+        last_signature_counter: inv.tse_counter,
+        last_signature_serial:  inv.tse_serial,
+        last_error:             null,
+        last_error_at:          null,
+      },
+    });
+  }
 
   // Decrement product stock
   for (const it of items) {
@@ -212,7 +309,50 @@ export async function stornoInvoice(originalId) {
     cashier_id: user?.id || "",
     cashier_name: user?.name || "",
     created_at: nowIso(),
+    tse_status: TSE_STATUS.NOT_REQUIRED,
+    tse_signature: null,
+    tse_serial: null,
+    tse_counter: null,
+    tse_timestamp: null,
+    tse_qr_code: null,
+    tse_error_message: null,
   };
+
+  // TSE signing for storno (reverse transaction).
+  const appSettings = await getSettings();
+  const tseCfg = appSettings?.tse;
+  if (isTseConfigured(tseCfg) && original.tse_status === TSE_STATUS.SIGNED) {
+    const payload = {
+      invoice_number:    storno.invoice_number,
+      timestamp_client:  storno.created_at,
+      payment_method:    storno.payment_method,
+      storno_of:         original.invoice_number,
+      storno_reference:  original.tse_signature,
+      totals: {
+        gross: storno.total,
+        net:   storno.net_total,
+        vat:   storno.vat_total,
+        by_rate: storno.vat_breakdown,
+      },
+      items: storno.items.map((it) => ({
+        name: it.name, quantity: it.quantity, unit_price: it.unit_price,
+        vat_rate: it.vat_rate, total: it.total,
+      })),
+    };
+    try {
+      const tse = await tseSignStorno(tseCfg, payload);
+      storno.tse_status    = TSE_STATUS.SIGNED;
+      storno.tse_signature = tse.signature ?? null;
+      storno.tse_serial    = tse.serial    ?? null;
+      storno.tse_counter   = tse.counter   ?? null;
+      storno.tse_timestamp = tse.timestamp ?? null;
+      storno.tse_qr_code   = tse.qr_code   ?? null;
+    } catch (e) {
+      storno.tse_status        = TSE_STATUS.PENDING;
+      storno.tse_error_message = e?.message || "TSE storno signing failed";
+    }
+  }
+
   await db.invoices.add(storno);
   await writeAudit("invoice_storno", storno.id, {
     storno_of: original.invoice_number,

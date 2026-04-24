@@ -138,7 +138,24 @@ export default function POS() {
       setCustomerName(t("pos.walk_in"));
       navigate(`/invoices/${r.data.id}`);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Error");
+      // TSE failed → the invoice was still saved as "pending". Navigate
+      // to it so the cashier sees the warning and can retry later.
+      if (e?.code === "TSE_PENDING" && e?.invoice?.id) {
+        toast.error(
+          lang === "de"
+            ? "TSE-Signatur fehlgeschlagen — Rechnung als Pending gespeichert"
+            : "فشل توقيع TSE — تم حفظ الفاتورة كـ Pending",
+          { duration: 6000 },
+        );
+        setCart([]);
+        setDiscount(0);
+        setTax(0);
+        setCustomerId("");
+        setCustomerName(t("pos.walk_in"));
+        navigate(`/invoices/${e.invoice.id}`);
+      } else {
+        toast.error(e?.response?.data?.detail || e?.message || "Error");
+      }
     } finally {
       setSubmitting(false);
     }
