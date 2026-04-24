@@ -13,7 +13,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages, Image as ImageIcon, UserCog, KeyRound, ShieldCheck, AlertTriangle, CheckCircle2, RefreshCw, Timer, PlayCircle } from "lucide-react";
-import { testConnection as tseTestConnection, isTseConfigured } from "../services/tse";
+import { testConnection as tseTestConnection, isTseConfigured, createClient as tseCreateClient } from "../services/tse";
 import { toast } from "sonner";
 import { exportBackup, restoreFromFile, runBackup } from "../services/backup";
 
@@ -393,9 +393,14 @@ export default function Settings() {
               onChange={(e) => setTse({ ...tse, client_id: e.target.value })}
               autoCapitalize="none"
               spellCheck={false}
-              placeholder="e.g. 8a1c…"
+              placeholder={lang === "de" ? "automatisch beim Testen" : "يُنشأ تلقائياً عند الاختبار"}
               data-testid="tse-client-id-input"
             />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {lang === "de"
+                ? "Leer lassen — wird beim ersten \"Test TSE Connection\" automatisch erstellt (kasse-01…)."
+                : "اتركه فارغاً — يُنشأ تلقائياً مع أول \"اختبار اتصال TSE\" (kasse-01…)."}
+            </p>
           </div>
 
           <div>
@@ -483,7 +488,21 @@ export default function Settings() {
               setTestingTse(true);
               setTseStatus({ connected: null, latency_ms: null, error: null, checked_at: null });
               try {
-                const r = await tseTestConnection(tse);
+                // 1) Auto-provision a client if the cashier hasn't entered one yet.
+                let activeCfg = tse;
+                if (!tse.client_id) {
+                  const created = await tseCreateClient(tse);
+                  activeCfg = { ...tse, client_id: created.client_id };
+                  setTse(activeCfg);
+                  // Persist immediately so a crash before "Save" doesn't lose it.
+                  await api.put("/settings", { tse: { ...(settings?.tse || {}), ...activeCfg } });
+                  await reload();
+                  toast.success(
+                    (lang === "de" ? "Client angelegt: " : "تم إنشاء الحساب: ") + created.client_id,
+                  );
+                }
+                // 2) Now actually test the connection against /health.
+                const r = await tseTestConnection(activeCfg);
                 setTseStatus({ connected: true, latency_ms: r.latency_ms ?? null, error: null, checked_at: new Date().toISOString() });
                 toast.success(lang === "de" ? "TSE-Verbindung OK" : "الاتصال بـ TSE ناجح");
               } catch (err) {

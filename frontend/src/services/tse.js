@@ -169,6 +169,27 @@ export async function signStorno(tseSettings, invoicePayload) {
  * (backend URL + TSS ID + Client ID). Used to decide whether invoices
  * must be signed at point of sale or can skip TSE entirely.
  */
+/**
+ * Auto-create a Fiskaly client via the backend when the cashier hasn't
+ * entered a client_id yet. The backend picks a stable id like `kasse-01`
+ * and returns it. The caller must persist the returned client_id into
+ * the app settings before using it for signing.
+ */
+export async function createClient(tseSettings, preferredClientId = "") {
+  if (!tseSettings?.backend_url) {
+    const err = new Error("Backend URL not set");
+    err.code = "NO_BACKEND_URL";
+    throw err;
+  }
+  return await postJson(
+    buildUrl(tseSettings.backend_url, "/api/tse/client/create"),
+    {
+      tss_id: tseSettings.tss_id || "",
+      preferred_client_id: preferredClientId || "",
+    },
+  );
+}
+
 export function isTseConfigured(tseSettings) {
   if (!tseSettings) return false;
   return Boolean(

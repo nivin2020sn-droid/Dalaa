@@ -127,6 +127,21 @@ class InvoiceItem(BaseModel):
     total: float
 
 
+class CreateClientRequest(BaseModel):
+    tss_id: Optional[str] = ""
+    # Optional preferred id — if provided the backend uses it verbatim,
+    # otherwise it generates a stable kasse-NN identifier.
+    preferred_client_id: Optional[str] = ""
+
+
+class CreateClientResponse(BaseModel):
+    client_id: str
+    tss_id: str
+    serial_number: str
+    created_at: str
+    mock: bool
+
+
 class SignRequest(BaseModel):
     # Non-secret identifiers echoed back for traceability.
     tss_id: Optional[str] = ""
@@ -253,6 +268,85 @@ def tse_health():
         "last_counter": int(state.get("counter", 0)),
         "server_time": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     }
+
+
+# ----------------------------------------------------------------------
+# Auto-create a Fiskaly client. In real Fiskaly this hits:
+#   PUT https://kassensichv.io/api/v2/clients/{uuid}
+# with an OAuth2 bearer token. Until credentials arrive, we mint a
+# deterministic mock id (kasse-01, kasse-02, …) and persist the mapping
+# so the same device stays bound to its generated client.
+# ----------------------------------------------------------------------
+_CLIENTS_FILE = STORAGE_DIR / "clients.json"
+
+
+def _load_clients() -> dict:
+    if _CLIENTS_FILE.exists():
+        try:
+            return json.loads(_CLIENTS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _save_clients(data: dict) -> None:
+    _CLIENTS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _next_client_id() -> str:
+    clients = _load_clients()
+    used = {v.get("client_id") for v in clients.values()}
+    # Find the first free kasse-NN slot.
+    for n in range(1, 1000):
+        candidate = f"kasse-{n:02d}"
+        if candidate not in used:
+            return candidate
+    return f"kasse-{uuid.uuid4().hex[:8]}"
+
+
+@app.post("/api/tse/client/create", response_model=CreateClientResponse)
+def tse_create_client(payload: CreateClientRequest):
+    tss_id = (payload.tss_id or "").strip()
+    preferred = (payload.preferred_client_id or "").strip()
+    client_id = preferred or _next_client_id()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    with _lock:
+        clients = _load_clients()
+        key = f"{tss_id or 'default'}::{client_id}"
+        # Idempotent: if the same (tss, client) already exists, return it.
+        if key not in clients:
+            clients[key] = {
+                "client_id": client_id,
+                "tss_id": tss_id,
+                "serial_number": MOCK_SERIAL if MOCK_MODE else "",
+                "created_at": now,
+            }
+            _save_clients(clients)
+        record = clients[key]
+
+    # --------------------------------------------------------------
+    # TODO (real Fiskaly wiring — replace mock branch below):
+    #
+    #   import httpx, uuid
+    #   token = await _fiskaly_access_token()   # OAuth2 exchange
+    #   new_id = str(uuid.uuid4())
+    #   resp = httpx.put(
+    #     f"https://kassensichv.io/api/v2/clients/{new_id}",
+    #     json={"serial_number": payload.tss_id},
+    #     headers={"Authorization": f"Bearer {token}"},
+    #   )
+    #   data = resp.json()
+    #   return CreateClientResponse(client_id=data["_id"], ...)
+    # --------------------------------------------------------------
+
+    return CreateClientResponse(
+        client_id=record["client_id"],
+        tss_id=record["tss_id"],
+        serial_number=record["serial_number"] or (MOCK_SERIAL if MOCK_MODE else ""),
+        created_at=record["created_at"],
+        mock=MOCK_MODE,
+    )
 
 
 @app.post("/api/tse/sign", response_model=SignResponse)
