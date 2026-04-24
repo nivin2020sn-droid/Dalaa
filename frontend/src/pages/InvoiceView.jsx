@@ -219,6 +219,28 @@ export default function InvoiceView() {
         </div>
       )}
 
+      {/* TSE signed but not yet archived to backend — non-blocking warning. */}
+      {isOfficial && inv.archive_status === "pending" && (
+        <div
+          className="no-print mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 max-w-2xl mx-auto"
+          data-testid="invoice-archive-pending-banner"
+        >
+          <div className="font-bold mb-1">
+            📦 {lang === "de" ? "Externe Archivierung ausstehend" : "الأرشفة الخارجية معلّقة"}
+          </div>
+          <div className="leading-relaxed">
+            {lang === "de"
+              ? "Die Rechnung ist TSE-signiert und gültig, wurde aber noch nicht extern archiviert. Sie können sie über die Seite \"Pending Archive\" erneut hochladen."
+              : "الفاتورة موقعة بـ TSE ولكن لم يتم أرشفتها خارجياً. يمكنك إعادة رفعها من صفحة \"الأرشفة المعلقة\"."}
+          </div>
+          {inv.archive_error && (
+            <div className="text-[11px] text-amber-800 mt-1 font-mono break-words">
+              {inv.archive_error}
+            </div>
+          )}
+        </div>
+      )}
+
       <Card
         ref={printRef}
         className="print-area invoice-compact p-5 md:p-6 rounded-2xl card-ambient max-w-2xl mx-auto"

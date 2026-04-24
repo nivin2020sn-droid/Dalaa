@@ -8,8 +8,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Eye, Ban } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Eye, Ban, Archive } from "lucide-react";
+import { useNavigate, Link } from "react-router-dom";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "../components/ui/table";
 import { toast } from "sonner";
 
@@ -31,6 +31,8 @@ export default function Invoices() {
     setItems(r.data);
   };
   useEffect(() => { load(); }, []);
+
+  const pendingArchiveCount = items.filter((i) => i.archive_status === "pending").length;
 
   const renderStatus = (inv) => {
     if (inv.status === "reversal") {
@@ -60,9 +62,22 @@ export default function Invoices() {
 
   return (
     <div data-testid="invoices-page">
-      <div className="mb-6">
-        <h1 className="font-heading text-3xl md:text-4xl font-bold">{t("nav.invoices")}</h1>
-        <p className="text-muted-foreground mt-1">{lang === "de" ? "Alle Verkäufe (GoBD-konform)" : "سجل جميع عمليات البيع (متوافق مع GoBD)"}</p>
+      <div className="mb-6 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="font-heading text-3xl md:text-4xl font-bold">{t("nav.invoices")}</h1>
+          <p className="text-muted-foreground mt-1">{lang === "de" ? "Alle Verkäufe (GoBD-konform)" : "سجل جميع عمليات البيع (متوافق مع GoBD)"}</p>
+        </div>
+        <Link to="/invoices/pending-archive">
+          <Button variant="outline" className="h-11 gap-2" data-testid="open-pending-archive-button">
+            <Archive size={16} />
+            {lang === "de" ? "Ausstehende Archivierung" : "الأرشفة المعلّقة"}
+            {pendingArchiveCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] rounded-full bg-amber-500 text-white text-[11px] font-bold px-1.5">
+                {pendingArchiveCount}
+              </span>
+            )}
+          </Button>
+        </Link>
       </div>
 
       <Card className="rounded-2xl card-ambient overflow-hidden">

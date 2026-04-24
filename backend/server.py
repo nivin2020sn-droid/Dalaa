@@ -49,6 +49,7 @@ STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 STATE_FILE = STORAGE_DIR / "state.json"
 TX_LOG_FILE = STORAGE_DIR / "transactions.jsonl"
+ARCHIVE_FILE = STORAGE_DIR / "invoices_archive.jsonl"
 
 # Mock TSE serial — a stable per-install identifier so multiple invoices
 # share the same serial (just like a real hardware TSE would).
@@ -497,6 +498,161 @@ def tse_export_dsfinvk(
     filename = f"DSFinV-K_{from_}_{to}.zip"
     return Response(
         content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ----------------------------------------------------------------------
+# Invoice Archive — persistent external copy of every TSE-signed invoice.
+# Accepts the full invoice payload from the mobile app AFTER the TSE
+# envelope has been obtained. The record is stored in JSONL and can be
+# exported as a ZIP of CSVs for bookkeeping / Finanzamt review.
+# ----------------------------------------------------------------------
+class ArchiveInvoiceRequest(BaseModel):
+    invoice_number: str
+    created_at: str
+    customer_id: Optional[str] = ""
+    customer_name: Optional[str] = ""
+    cashier_id: Optional[str] = ""
+    cashier_name: Optional[str] = ""
+    payment_method: str = "cash"
+    status: str = "active"         # "active" | "reversal"
+    storno_of: Optional[str] = None
+    storno_of_number: Optional[str] = None
+    subtotal: Optional[float] = 0
+    discount: Optional[float] = 0
+    tax: Optional[float] = 0
+    total: float
+    net_total: float
+    vat_total: float
+    vat_breakdown: list[dict[str, Any]] = Field(default_factory=list)
+    items: list[InvoiceItem] = Field(default_factory=list)
+    # TSE envelope (signed receipts only reach here).
+    tse_status: str
+    tse_signature: Optional[str] = None
+    tse_serial: Optional[str] = None
+    tse_counter: Optional[int] = None
+    tse_timestamp: Optional[str] = None
+    tse_qr_code: Optional[str] = None
+
+
+class ArchiveInvoiceResponse(BaseModel):
+    archive_status: str      # "success"
+    archived_at: str
+    invoice_number: str
+
+
+def _append_archive(row: dict) -> None:
+    with ARCHIVE_FILE.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _iter_archive():
+    if not ARCHIVE_FILE.exists():
+        return
+    with ARCHIVE_FILE.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                yield json.loads(line)
+            except Exception:
+                continue
+
+
+@app.post("/api/invoices/archive", response_model=ArchiveInvoiceResponse)
+def invoices_archive(payload: ArchiveInvoiceRequest):
+    archived_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    with _lock:
+        _append_archive({
+            "archived_at": archived_at,
+            **payload.model_dump(),
+            "items": [it.model_dump() for it in payload.items],
+        })
+    return ArchiveInvoiceResponse(
+        archive_status="success",
+        archived_at=archived_at,
+        invoice_number=payload.invoice_number,
+    )
+
+
+@app.get("/api/invoices/export")
+def invoices_export(
+    from_: Optional[str] = Query(None, alias="from", description="YYYY-MM-DD"),
+    to: Optional[str] = Query(None, description="YYYY-MM-DD"),
+):
+    # Validate optional date filters.
+    for d in (from_, to):
+        if d is not None and not _DATE_RE.match(d):
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    rows = []
+    for r in _iter_archive():
+        day = (r.get("created_at") or "")[:10]
+        if from_ and day < from_:
+            continue
+        if to and day > to:
+            continue
+        rows.append(r)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        # invoices.csv — one row per invoice
+        header = [
+            "invoice_number", "created_at", "archived_at", "status", "storno_of_number",
+            "customer_name", "cashier_name", "payment_method",
+            "net_total", "vat_total", "total",
+        ]
+        lines = [",".join(header)]
+        for r in rows:
+            lines.append(",".join(_csv_escape(r.get(k)) for k in header))
+        z.writestr("invoices.csv", "\n".join(lines) + "\n")
+
+        # invoice_items.csv — one row per line item
+        hdr2 = ["invoice_number", "name", "quantity", "unit_price", "vat_rate", "total"]
+        lines2 = [",".join(hdr2)]
+        for r in rows:
+            for it in (r.get("items") or []):
+                lines2.append(",".join(_csv_escape(v) for v in [
+                    r.get("invoice_number"),
+                    it.get("name"), it.get("quantity"), it.get("unit_price"),
+                    it.get("vat_rate"), it.get("total"),
+                ]))
+        z.writestr("invoice_items.csv", "\n".join(lines2) + "\n")
+
+        # tse_data.csv — TSE envelope per invoice
+        hdr3 = [
+            "invoice_number", "tse_status", "tse_signature", "tse_serial",
+            "tse_counter", "tse_timestamp", "tse_qr_code",
+        ]
+        lines3 = [",".join(hdr3)]
+        for r in rows:
+            lines3.append(",".join(_csv_escape(r.get(k)) for k in hdr3))
+        z.writestr("tse_data.csv", "\n".join(lines3) + "\n")
+
+        # storno.csv — only storno rows
+        hdr4 = ["invoice_number", "created_at", "storno_of_number", "total", "tse_signature"]
+        lines4 = [",".join(hdr4)]
+        for r in rows:
+            if r.get("status") == "reversal":
+                lines4.append(",".join(_csv_escape(r.get(k)) for k in hdr4))
+        z.writestr("storno.csv", "\n".join(lines4) + "\n")
+
+        # README
+        z.writestr(
+            "README.txt",
+            "This archive contains all TSE-signed invoices submitted to\n"
+            "POST /api/invoices/archive by the Dalaa Beauty mobile app.\n"
+            f"Generated at: {datetime.now(timezone.utc).isoformat()}\n"
+            f"Filter: from={from_ or '-'} to={to or '-'}\n"
+            f"Invoice count: {len(rows)}\n",
+        )
+    buf.seek(0)
+    filename = f"invoices_archive_{from_ or 'all'}_{to or 'all'}.zip"
+    return Response(
+        content=buf.read(),
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

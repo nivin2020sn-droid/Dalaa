@@ -66,4 +66,27 @@ db.version(3).stores({
   });
 });
 
+// v4: add external-archive fields to invoices.
+db.version(4).stores({
+  users: "id, email",
+  products: "id, name, sku, vat_rate",
+  services: "id, name, vat_rate",
+  customers: "id, name, phone",
+  appointments: "id, date",
+  invoices: "id, invoice_number, created_at, status, storno_of, tse_status, archive_status",
+  expenses: "id, date",
+  settings: "id",
+  audit_log: "id, created_at, actor_id, action, entity",
+}).upgrade(async (tx) => {
+  await tx.table("invoices").toCollection().modify((i) => {
+    if (i.archive_status === undefined) {
+      // TSE-signed invoices predating v4 are flagged as pending so the
+      // user can retry archiving them from the new "Pending Archive" UI.
+      i.archive_status = (i.tse_status === "signed") ? "pending" : "not_required";
+    }
+    if (i.archived_at === undefined) i.archived_at = null;
+    if (i.archive_error === undefined) i.archive_error = null;
+  });
+});
+
 export default db;

@@ -3,6 +3,7 @@ import { newId, nowIso } from "../db/seed";
 import { currentUser } from "./auth";
 import { getSettings } from "./settings";
 import { isTseConfigured, signInvoice as tseSignInvoice, signStorno as tseSignStorno, TSE_STATUS } from "./tse";
+import { archiveInvoice as archiveInvoiceRemote, ARCHIVE_STATUS } from "./archive";
 
 async function nextInvoiceNumber() {
   const count = await db.invoices.count();
@@ -140,6 +141,10 @@ export async function createInvoice(body) {
     tse_timestamp: null,
     tse_qr_code: null,
     tse_error_message: null,
+    // --- External archive status (filled below after TSE success) ---
+    archive_status: ARCHIVE_STATUS.NOT_REQUIRED,
+    archived_at: null,
+    archive_error: null,
   };
 
   // ──────────────────────────────────────────────────────────────────
@@ -178,6 +183,9 @@ export async function createInvoice(body) {
       inv.tse_counter   = tse.counter   ?? null;
       inv.tse_timestamp = tse.timestamp ?? null;
       inv.tse_qr_code   = tse.qr_code   ?? null;
+      // Invoice now qualifies for external archiving — mark as pending
+      // and attempt the upload below. Failure is non-fatal.
+      inv.archive_status = ARCHIVE_STATUS.PENDING;
     } catch (e) {
       inv.tse_status        = TSE_STATUS.PENDING;
       inv.tse_error_message = e?.message || "TSE signing failed";
@@ -192,6 +200,24 @@ export async function createInvoice(body) {
           last_error_at: nowIso(),
         },
       });
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // External archive (TSE-signed invoices only). Best-effort: if the
+  // backend is unreachable the invoice stays TSE-signed and valid but
+  // is marked as `archive_status = pending` so the user can retry
+  // from the Pending Archive page.
+  // ──────────────────────────────────────────────────────────────────
+  if (inv.tse_status === TSE_STATUS.SIGNED && isTseConfigured(tseCfg)) {
+    try {
+      const r = await archiveInvoiceRemote(tseCfg, inv);
+      inv.archive_status = ARCHIVE_STATUS.ARCHIVED;
+      inv.archived_at    = r?.archived_at || nowIso();
+      inv.archive_error  = null;
+    } catch (e) {
+      inv.archive_status = ARCHIVE_STATUS.PENDING;
+      inv.archive_error  = e?.message || "Archive upload failed";
     }
   }
 
@@ -347,9 +373,24 @@ export async function stornoInvoice(originalId) {
       storno.tse_counter   = tse.counter   ?? null;
       storno.tse_timestamp = tse.timestamp ?? null;
       storno.tse_qr_code   = tse.qr_code   ?? null;
+      storno.archive_status = ARCHIVE_STATUS.PENDING;
     } catch (e) {
       storno.tse_status        = TSE_STATUS.PENDING;
       storno.tse_error_message = e?.message || "TSE storno signing failed";
+    }
+  }
+
+  // External archive for the storno (best-effort, non-blocking).
+  if (storno.tse_status === TSE_STATUS.SIGNED && isTseConfigured(await getSettings().then(s => s?.tse))) {
+    try {
+      const cfg = (await getSettings())?.tse;
+      const r = await archiveInvoiceRemote(cfg, storno);
+      storno.archive_status = ARCHIVE_STATUS.ARCHIVED;
+      storno.archived_at    = r?.archived_at || nowIso();
+      storno.archive_error  = null;
+    } catch (e) {
+      storno.archive_status = ARCHIVE_STATUS.PENDING;
+      storno.archive_error  = e?.message || "Archive upload failed";
     }
   }
 
@@ -383,8 +424,61 @@ export async function stornoInvoice(originalId) {
 }
 
 /**
- * GoBD: Invoices MUST NOT be deleted. This function is kept as a no-op
- * that throws, to prevent any UI code accidentally deleting.
+ * List all invoices whose archive_status is "pending" (TSE-signed but
+ * not yet persisted to the backend archive).
+ */
+export async function listPendingArchive() {
+  const rows = await db.invoices.where("archive_status").equals(ARCHIVE_STATUS.PENDING).toArray();
+  // Sort oldest → newest so retrying is predictable.
+  rows.sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  return rows;
+}
+
+/**
+ * Retry archiving a specific pending invoice. On success updates the
+ * local record to "archived".
+ */
+export async function retryArchive(invoiceId) {
+  const inv = await db.invoices.get(invoiceId);
+  if (!inv) throw new Error("Invoice not found");
+  if (inv.tse_status !== TSE_STATUS.SIGNED) {
+    throw new Error("Cannot archive — invoice is not TSE-signed");
+  }
+  const s = await getSettings();
+  const tseCfg = s?.tse;
+  if (!isTseConfigured(tseCfg)) throw new Error("TSE backend not configured");
+
+  try {
+    const r = await archiveInvoiceRemote(tseCfg, inv);
+    await db.invoices.update(invoiceId, {
+      archive_status: ARCHIVE_STATUS.ARCHIVED,
+      archived_at:    r?.archived_at || nowIso(),
+      archive_error:  null,
+    });
+    await writeAudit("invoice_archived", invoiceId, {
+      number: inv.invoice_number, archived_at: r?.archived_at,
+    });
+    return { ok: true };
+  } catch (e) {
+    const msg = e?.message || "Archive retry failed";
+    await db.invoices.update(invoiceId, { archive_error: msg });
+    throw e;
+  }
+}
+
+/** Retry every pending invoice sequentially. Returns { total, archived, failed }. */
+export async function retryAllPendingArchive() {
+  const list = await listPendingArchive();
+  let ok = 0, failed = 0;
+  for (const inv of list) {
+    try { await retryArchive(inv.id); ok += 1; }
+    catch { failed += 1; }
+  }
+  return { total: list.length, archived: ok, failed };
+}
+
+/**
+ * GoBD: Invoices MUST NOT be deleted.
  */
 export async function deleteInvoice() {
   const err = new Error("لا يمكن حذف الفواتير — استخدم Storno");

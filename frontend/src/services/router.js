@@ -24,6 +24,7 @@ async function handleGet(path) {
     return await reports.yearlyTaxReport({ year });
   }
   if (path === "/invoices") return await invoices.listInvoices();
+  if (path === "/invoices/pending-archive") return await invoices.listPendingArchive();
 
   const invMatch = path.match(/^\/invoices\/(.+)$/);
   if (invMatch) return await invoices.getInvoice(invMatch[1]);
@@ -40,6 +41,9 @@ async function handlePost(path, body) {
   if (path === "/auth/change-password") return await auth.changePassword(body);
   if (path === "/auth/reset-with-master") return await auth.resetWithMaster(body);
   if (path === "/invoices") return await invoices.createInvoice(body);
+  const retryMatch = path.match(/^\/invoices\/(.+)\/retry-archive$/);
+  if (retryMatch) return await invoices.retryArchive(retryMatch[1]);
+  if (path === "/invoices/retry-archive-all") return await invoices.retryAllPendingArchive();
 
   const stornoMatch = path.match(/^\/invoices\/(.+)\/storno$/);
   if (stornoMatch) return await invoices.stornoInvoice(stornoMatch[1]);

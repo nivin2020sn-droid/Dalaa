@@ -18,6 +18,7 @@ import InvoiceView from "./pages/InvoiceView";
 import Expenses from "./pages/Expenses";
 import Reports from "./pages/Reports";
 import YearlyTaxReport from "./pages/YearlyTaxReport";
+import PendingArchive from "./pages/PendingArchive";
 import SettingsPage from "./pages/Settings";
 import Account from "./pages/Account";
 import { startBackupScheduler } from "./services/backup";
@@ -77,6 +78,7 @@ function App() {
                 <Route path="customers" element={<Customers />} />
                 <Route path="appointments" element={<Appointments />} />
                 <Route path="invoices" element={<Invoices />} />
+                <Route path="invoices/pending-archive" element={<PendingArchive />} />
                 <Route path="invoices/:id" element={<InvoiceView />} />
                 <Route path="expenses" element={<Expenses />} />
                 <Route path="reports" element={<Reports />} />
