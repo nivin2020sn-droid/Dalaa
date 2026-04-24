@@ -68,7 +68,9 @@ export default function Settings() {
   const [savingBackup, setSavingBackup] = useState(false);
   const [runningBackup, setRunningBackup] = useState(false);
 
-  const isAdmin = user?.role === "admin";
+  // Master OR Admin can use this page (settings UI is already master-gated
+  // at the route level — this flag just enables edit buttons).
+  const isAdmin = user?.role === "admin" || user?.role === "master";
 
   const onLogoPick = async (e) => {
     const file = e.target.files?.[0];
