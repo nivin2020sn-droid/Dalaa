@@ -39,6 +39,13 @@
 - 2026-04: **Auto-backup scheduler** — hourly, numbered (`backup_000001_YYYY-MM-DD_HH-MM.db`), configurable folder, Backup Now button, success/failure tracked.
 - 2026-04: **TSE Mock Backend deployed** — FastAPI at `/app/backend/server.py`, 4 endpoints (`/health`, `/sign`, `/storno`, `/export-dsfinvk`), HMAC-SHA256 mock signatures, Fiskaly-format QR codes, transaction JSONL log, DSFinV-K ZIP export. End-to-end tested: invoice INV-000001 signed with Serial MOCK-TSE-… + counter + QR on receipt.
 - 2026-04: **Railway deploy artifacts** — `Procfile`, `railway.json`, `runtime.txt`, README in Arabic.
+- 2026-02: **Daily-usability UX pack** (4 features):
+  - WhatsApp button: text-only `wa.me/<phone>?text=...` with auto-fetched customer phone + customizable template (settings) supporting `{{invoice_number}} {{total_amount}} {{customer_name}} {{shop_name}}`.
+  - Email button: `mailto:` only — no API, no internet — auto-fetched email, prompts if missing.
+  - Dual print layouts: A4 PDF + 80mm thermal receipt + 58mm thermal receipt — all with QR + TSE block + totals (`/components/InvoiceReceipt.jsx`, `pdf.exportReceiptToPdf`).
+  - Separate "PDF senden" share button uses Capacitor Share so user picks WhatsApp/Mail/Drive manually.
+  - Appointments: Mail (mailto) + Print (PDF via `AppointmentReceipt`) buttons on every appointment card. Post-save confirm-dialog auto-prompts mailto when customer email exists.
+  - **In-App APK Updater** (`services/updater.js` + `components/UpdateChecker.jsx`): reads configurable `update.json` URL (master-only) — typically GitHub raw — compares semver with `package.json` `version`, shows AlertDialog prompt, "Skip this version" persists in localStorage, "Download" opens APK URL via `window.open`. IndexedDB preserved on Android in-place upgrade (same package id + signing key).
 
 ## Current status
 Healthy. All endpoints live and tested. Mock TSE successfully signs invoices through the full flow.
