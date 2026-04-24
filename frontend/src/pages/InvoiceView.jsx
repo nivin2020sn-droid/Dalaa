@@ -32,9 +32,29 @@ export default function InvoiceView() {
 
   const pay = payLabels[inv.payment_method]?.[lang] || inv.payment_method;
   const isReversal = inv.status === "reversal";
+  // A receipt is "official" (legally distributable) only if TSE signed it
+  // OR if it was created before TSE was ever enabled (legacy records, kept
+  // as-is per GoBD immutability rules).
+  const isOfficial = inv.tse_status !== "pending" && inv.tse_status !== "failed";
   const BackIcon = dir === "rtl" ? ArrowRight : ArrowLeft;
 
+  // Guard handler used by the export/share buttons. Blocks any attempt to
+  // print/share an invoice whose TSE signature failed or is still pending.
+  const assertOfficial = () => {
+    if (!isOfficial) {
+      toast.error(
+        lang === "de"
+          ? "Diese Rechnung ist nicht offiziell und darf nicht gedruckt oder versendet werden, bis die TSE-Signatur erfolgreich ist."
+          : "هذه ليست فاتورة رسمية ولا يجوز طباعتها أو إرسالها حتى يتم توقيع TSE بنجاح.",
+        { duration: 7000 },
+      );
+      return false;
+    }
+    return true;
+  };
+
   const handlePdf = async () => {
+    if (!assertOfficial()) return;
     setBusy(true);
     try {
       await exportInvoiceToPdf(printRef.current, inv.invoice_number);
@@ -47,6 +67,7 @@ export default function InvoiceView() {
   };
 
   const handleEmail = async () => {
+    if (!assertOfficial()) return;
     let email = "";
     if (inv.customer_id) {
       try {
@@ -77,6 +98,7 @@ export default function InvoiceView() {
   };
 
   const handleWhatsApp = async () => {
+    if (!assertOfficial()) return;
     // Look up the customer's phone (if any) and let user confirm/edit.
     let phone = "";
     if (inv.customer_id) {
@@ -115,6 +137,7 @@ export default function InvoiceView() {
   // Fall back to generating & sharing the PDF (user can choose "Print" from
   // the Android share sheet — most OEM launchers include a Print target).
   const handlePrint = async () => {
+    if (!assertOfficial()) return;
     if (Capacitor.isNativePlatform()) {
       await handlePdf();
       return;
@@ -143,16 +166,16 @@ export default function InvoiceView() {
           <BackIcon size={16} className="mx-1" /> {t("common.back")}
         </Button>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" className="h-11" onClick={handlePrint} disabled={busy} data-testid="print-invoice-button">
+          <Button variant="outline" className="h-11" onClick={handlePrint} disabled={busy || !isOfficial} data-testid="print-invoice-button">
             <Printer size={16} className="mx-1" /> {t("common.print")}
           </Button>
-          <Button className="h-11" onClick={handlePdf} disabled={busy} data-testid="pdf-invoice-button">
+          <Button className="h-11" onClick={handlePdf} disabled={busy || !isOfficial} data-testid="pdf-invoice-button">
             <FileDown size={16} className="mx-1" /> {t("inv.pdf_button")}
           </Button>
           <Button
             className="h-11 bg-emerald-600 hover:bg-emerald-700 text-white"
             onClick={handleWhatsApp}
-            disabled={busy}
+            disabled={busy || !isOfficial}
             data-testid="whatsapp-invoice-button"
           >
             <MessageCircle size={16} className="mx-1" /> {lang === "de" ? "WhatsApp" : "واتساب"}
@@ -161,7 +184,7 @@ export default function InvoiceView() {
             variant="outline"
             className="h-11"
             onClick={handleEmail}
-            disabled={busy}
+            disabled={busy || !isOfficial}
             data-testid="email-invoice-button"
           >
             <Mail size={16} className="mx-1" /> {lang === "de" ? "E-Mail" : "بريد"}
@@ -173,6 +196,28 @@ export default function InvoiceView() {
           )}
         </div>
       </div>
+
+      {/* Non-official invoice warning — blocks print/export/share affordances. */}
+      {!isOfficial && (
+        <div
+          className="no-print mb-4 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900 max-w-2xl mx-auto"
+          data-testid="invoice-unofficial-banner"
+        >
+          <div className="font-bold mb-1">
+            ⚠️ {lang === "de" ? "Nicht offiziell" : "غير رسمية"}
+          </div>
+          <div className="leading-relaxed">
+            {lang === "de"
+              ? "Diese Rechnung ist nicht offiziell und darf nicht gedruckt oder versendet werden, bis die TSE-Signatur erfolgreich ist."
+              : "هذه ليست فاتورة رسمية ولا يجوز طباعتها أو إرسالها حتى يتم توقيع TSE بنجاح."}
+          </div>
+          {inv.tse_error_message && (
+            <div className="text-[11px] text-rose-700 mt-1 font-mono break-words">
+              {inv.tse_error_message}
+            </div>
+          )}
+        </div>
+      )}
 
       <Card
         ref={printRef}
