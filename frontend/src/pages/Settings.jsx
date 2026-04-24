@@ -12,10 +12,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages, Image as ImageIcon, UserCog, KeyRound, ShieldCheck, AlertTriangle, CheckCircle2, RefreshCw, Timer, PlayCircle } from "lucide-react";
+import { Sparkles, Upload, Trash2, Download, CloudUpload, Database, Languages, Image as ImageIcon, UserCog, KeyRound, ShieldCheck, AlertTriangle, CheckCircle2, RefreshCw, Timer, PlayCircle, MessageCircle, RefreshCcw } from "lucide-react";
 import { testConnection as tseTestConnection, isTseConfigured, createClient as tseCreateClient } from "../services/tse";
 import { toast } from "sonner";
 import { exportBackup, restoreFromFile, runBackup } from "../services/backup";
+import { ManualUpdateCheckButton } from "../components/UpdateChecker";
+import { APP_VERSION } from "../services/updater";
+import { DEFAULT_WHATSAPP_TEMPLATE } from "../context/SettingsContext";
 
 export default function Settings() {
   const { settings, reload } = useSettings();
@@ -752,6 +755,110 @@ export default function Settings() {
             value={form.receipt_footer || ""}
             onChange={(e) => setForm({ ...form, receipt_footer: e.target.value })}
             disabled={!isAdmin}
+          />
+        </div>
+      </Card>
+
+      {/* WhatsApp message template */}
+      <Card className="p-6 rounded-2xl card-ambient mb-5 space-y-4" data-testid="whatsapp-template-card">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-700 flex items-center justify-center">
+            <MessageCircle size={20} strokeWidth={1.75} />
+          </div>
+          <div>
+            <h3 className="font-heading font-bold text-lg leading-tight">
+              {lang === "de" ? "WhatsApp-Nachrichtentext" : "نص رسالة واتساب"}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {lang === "de"
+                ? "Wird beim Senden einer Rechnung über WhatsApp vorausgefüllt."
+                : "النص الذي يُرسَل تلقائياً عند مشاركة الفاتورة عبر واتساب."}
+            </p>
+          </div>
+        </div>
+        <Textarea
+          rows={8}
+          value={form.whatsapp_template ?? ""}
+          onChange={(e) => setForm({ ...form, whatsapp_template: e.target.value })}
+          disabled={!isAdmin}
+          className="font-mono text-sm leading-relaxed"
+          data-testid="whatsapp-template-input"
+          placeholder={DEFAULT_WHATSAPP_TEMPLATE}
+        />
+        <div className="flex flex-wrap gap-2 items-center justify-between">
+          <div className="text-[11px] text-muted-foreground leading-relaxed">
+            {lang === "de" ? "Verfügbare Variablen: " : "متغيرات متاحة: "}
+            <code className="font-mono">{"{{invoice_number}}"}</code>{" "}
+            <code className="font-mono">{"{{total_amount}}"}</code>{" "}
+            <code className="font-mono">{"{{customer_name}}"}</code>{" "}
+            <code className="font-mono">{"{{shop_name}}"}</code>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setForm({ ...form, whatsapp_template: DEFAULT_WHATSAPP_TEMPLATE })}
+            disabled={!isAdmin}
+            data-testid="reset-whatsapp-template-button"
+          >
+            {lang === "de" ? "Standardtext einsetzen" : "إعادة النص الافتراضي"}
+          </Button>
+        </div>
+      </Card>
+
+      {/* In-App APK Updater (Master only — set update.json URL) */}
+      <Card className="p-6 rounded-2xl card-ambient mb-5 space-y-4" data-testid="updater-card">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
+            <RefreshCcw size={20} strokeWidth={1.75} />
+          </div>
+          <div>
+            <h3 className="font-heading font-bold text-lg leading-tight">
+              {lang === "de" ? "App-Aktualisierung" : "تحديث التطبيق"}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {lang === "de"
+                ? `Aktuelle Version: ${APP_VERSION}`
+                : `النسخة الحالية: ${APP_VERSION}`}
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <Label>{lang === "de" ? "URL zu update.json (GitHub raw)" : "رابط ملف update.json (GitHub raw)"}</Label>
+          <Input
+            type="url"
+            placeholder="https://raw.githubusercontent.com/USER/REPO/main/update.json"
+            value={form.update_url || ""}
+            onChange={(e) => setForm({ ...form, update_url: e.target.value })}
+            autoCapitalize="none"
+            spellCheck={false}
+            data-testid="update-url-input"
+          />
+          <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+            {lang === "de"
+              ? "Beim Start prüft die App diesen Link. Wenn dort eine neuere Version steht, wird ein Update-Dialog angezeigt. JSON-Format: { version, apk_url, mandatory, notes_de, notes_ar }."
+              : "يتحقق التطبيق من هذا الرابط عند البدء. إذا توفرت نسخة أحدث، يظهر زر التحديث. صيغة JSON: { version, apk_url, mandatory, notes_de, notes_ar }."}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <ManualUpdateCheckButton
+            onResult={(r) => {
+              if (r?.error) {
+                toast.error(r.error);
+                return;
+              }
+              if (r?.available) {
+                toast.success(
+                  (lang === "de" ? "Neue Version: " : "نسخة جديدة: ") + r.latest,
+                );
+              } else {
+                toast.success(
+                  lang === "de" ? "App ist aktuell" : "التطبيق محدّث",
+                );
+              }
+            }}
           />
         </div>
       </Card>

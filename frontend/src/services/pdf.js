@@ -202,6 +202,120 @@ export async function shareInvoiceByEmail(domNode, filename, recipientEmail, sub
 }
 
 /**
+ * Generate a thermal-receipt PDF (58mm or 80mm wide rolls) from a hidden DOM
+ * node styled as a receipt. Uses the DOM node's natural pixel width so
+ * Arabic / German text renders via the browser font stack.
+ *
+ * On Android (Capacitor): saves to Cache and opens the share sheet.
+ * On Web: triggers a browser download.
+ */
+export async function exportReceiptToPdf(domNode, filename, widthMm = 80) {
+  if (!domNode) throw new Error("Receipt DOM node not found");
+
+  const canvas = await html2canvas(domNode, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: "#ffffff",
+    logging: false,
+    windowWidth: domNode.scrollWidth,
+    windowHeight: domNode.scrollHeight,
+  });
+  const imgData = canvas.toDataURL("image/png");
+
+  // Page width = roll width; page height = scaled image height + small padding.
+  const pageWidth = widthMm;
+  const aspect = canvas.height / canvas.width;
+  const pageHeight = Math.max(60, pageWidth * aspect + 6);
+
+  const pdf = new jsPDF({
+    unit: "mm",
+    format: [pageWidth, pageHeight],
+    orientation: "portrait",
+  });
+
+  const margin = 2;
+  const usableWidth = pageWidth - margin * 2;
+  const imgHeight = usableWidth * aspect;
+  pdf.addImage(imgData, "PNG", margin, margin, usableWidth, imgHeight);
+
+  const safeFilename = (filename || "receipt") + `_${widthMm}mm.pdf`;
+
+  if (Capacitor.isNativePlatform()) {
+    const base64 = pdf.output("datauristring").split(",")[1];
+    const result = await Filesystem.writeFile({
+      path: safeFilename,
+      data: base64,
+      directory: Directory.Cache,
+    });
+    await Share.share({
+      title: safeFilename,
+      text: "Beleg / إيصال",
+      url: result.uri,
+      dialogTitle: "Drucken / Speichern",
+    });
+  } else {
+    pdf.save(safeFilename);
+  }
+}
+
+/**
+ * Generate a tall PDF (A5-ish portrait) for an appointment confirmation slip
+ * captured from a hidden DOM node, then open the share sheet on native or
+ * trigger a download on web. Used both for "print" and for "send" flows.
+ */
+export async function exportAppointmentToPdf(domNode, filename) {
+  if (!domNode) throw new Error("Appointment DOM node not found");
+
+  const canvas = await html2canvas(domNode, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: "#ffffff",
+    logging: false,
+    windowWidth: domNode.scrollWidth,
+    windowHeight: domNode.scrollHeight,
+  });
+  const imgData = canvas.toDataURL("image/png");
+
+  // Use A5 portrait so the slip is easy to print on a regular printer; thermal
+  // printers can still consume it via the OS print dialog (auto-fit).
+  const pdf = new jsPDF({ unit: "mm", format: "a5", orientation: "portrait" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 8;
+  const usableWidth = pageWidth - margin * 2;
+  const usableHeight = pageHeight - margin * 2;
+
+  const imgProps = pdf.getImageProperties(imgData);
+  let imgWidth = usableWidth;
+  let imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+  if (imgHeight > usableHeight) {
+    imgHeight = usableHeight;
+    imgWidth = (imgProps.width * imgHeight) / imgProps.height;
+  }
+  const xOff = (pageWidth - imgWidth) / 2;
+  pdf.addImage(imgData, "PNG", xOff, margin, imgWidth, imgHeight);
+
+  const safeFilename = (filename || "appointment") + ".pdf";
+
+  if (Capacitor.isNativePlatform()) {
+    const base64 = pdf.output("datauristring").split(",")[1];
+    const result = await Filesystem.writeFile({
+      path: safeFilename,
+      data: base64,
+      directory: Directory.Cache,
+    });
+    await Share.share({
+      title: safeFilename,
+      text: "Terminbestätigung",
+      url: result.uri,
+      dialogTitle: "Drucken / Senden",
+    });
+  } else {
+    pdf.save(safeFilename);
+  }
+}
+
+/**
  * Export the whole DB backup JSON as a mail attachment (helper for settings).
  */
 export async function shareBackupEmail(jsonString, filename) {

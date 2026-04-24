@@ -28,6 +28,7 @@ const MASTER_ONLY_FIELDS = new Set([
   "backup",
   "login_background_url",
   "tax_id", // fiscal identifier — locked down
+  "update_url", // APK update manifest URL
 ]);
 
 function containsMasterOnlyEdit(oldSettings, body) {

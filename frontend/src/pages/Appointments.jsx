@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { useI18n } from "../i18n/I18nContext";
+import { useSettings } from "../context/SettingsContext";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -8,9 +9,11 @@ import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Plus, Pencil, Trash2, Clock, ChevronLeft, ChevronRight, CalendarDays, List } from "lucide-react";
+import { Plus, Pencil, Trash2, Clock, ChevronLeft, ChevronRight, CalendarDays, List, Mail, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "../components/ui/badge";
+import AppointmentReceipt from "../components/AppointmentReceipt";
+import { exportAppointmentToPdf } from "../services/pdf";
 
 const empty = {
   customer_id: "", customer_name: "", service_id: "", service_name: "",
@@ -39,7 +42,8 @@ const toIsoDate = (d) => {
 };
 
 export default function Appointments() {
-  const { t, lang } = useI18n();
+  const { t, lang, dir } = useI18n();
+  const { settings } = useSettings();
   const [items, setItems] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [services, setServices] = useState([]);
@@ -52,6 +56,8 @@ export default function Appointments() {
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const [selectedDay, setSelectedDay] = useState(null); // ISO date of selected cell for day-list dialog
+  const [shareAppt, setShareAppt] = useState(null); // appointment being shared/printed
+  const shareReceiptRef = useRef(null);
 
   const locale = lang === "de" ? "de-DE" : "ar-EG";
 
@@ -68,10 +74,31 @@ export default function Appointments() {
         toast.error(lang === "de" ? "Felder fehlen" : "أكمل الحقول");
         return;
       }
-      if (editId) await api.put(`/appointments/${editId}`, form);
-      else await api.post("/appointments", form);
+      let saved;
+      if (editId) {
+        const r = await api.put(`/appointments/${editId}`, form);
+        saved = r.data;
+      } else {
+        const r = await api.post("/appointments", form);
+        saved = r.data;
+      }
       toast.success(lang === "de" ? "Gespeichert" : "تم الحفظ");
       setOpen(false); setForm(empty); setEditId(null); load();
+      // Offer to send a mailto: confirmation if it's a NEW appointment and the
+      // linked customer has an email on file.
+      if (!editId && saved && form.customer_id) {
+        const c = customers.find((x) => x.id === form.customer_id);
+        if (c?.email) {
+          setTimeout(() => {
+            const ok = window.confirm(
+              lang === "de"
+                ? `Bestätigungs-E-Mail an ${c.email} senden?`
+                : `إرسال بريد تأكيد إلى ${c.email}؟`,
+            );
+            if (ok) sendApptEmail({ ...saved, customer_email: c.email });
+          }, 250);
+        }
+      }
     } catch (e) { toast.error(e?.response?.data?.detail || "Error"); }
   };
   const edit = (a) => { setForm(a); setEditId(a.id); setSelectedDay(null); setOpen(true); };
@@ -87,6 +114,65 @@ export default function Appointments() {
   const onService = (v) => {
     const s = services.find((x) => x.id === v);
     setForm({ ...form, service_id: v, service_name: s?.name || "" });
+  };
+
+  // ---------- Email / print helpers ----------
+  const apptDateLabel = (a) => {
+    if (!a?.date) return "";
+    return new Date(a.date + "T00:00:00").toLocaleDateString(locale, {
+      weekday: "long", year: "numeric", month: "long", day: "numeric",
+    });
+  };
+
+  const sendApptEmail = (a) => {
+    let email = a?.customer_email || "";
+    if (!email && a?.customer_id) {
+      const c = customers.find((x) => x.id === a.customer_id);
+      email = c?.email || "";
+    }
+    if (!email) {
+      const entered = window.prompt(
+        lang === "de" ? "E-Mail-Adresse des Kunden:" : "البريد الإلكتروني للعميل:",
+        "",
+      );
+      if (entered === null) return;
+      email = (entered || "").trim();
+    }
+    if (!email) {
+      toast.error(lang === "de" ? "Keine E-Mail vorhanden" : "لا يوجد بريد إلكتروني");
+      return;
+    }
+    const subject = lang === "de"
+      ? `Terminbestätigung — ${settings.shop_name}`
+      : `تأكيد موعد — ${settings.shop_name}`;
+    const dateStr = apptDateLabel(a);
+    const body = lang === "de"
+      ? `Hallo ${a.customer_name || ""},\n\nIhr Termin bei ${settings.shop_name} ist gebucht:\n\nLeistung: ${a.service_name || "—"}\nDatum: ${dateStr}\nUhrzeit: ${a.time || "—"}\n${a.notes ? "Notizen: " + a.notes + "\n" : ""}\nWir freuen uns auf Ihren Besuch!\n${settings.shop_name}`
+      : `مرحباً ${a.customer_name || ""}،\n\nتم تأكيد موعدك في ${settings.shop_name}:\n\nالخدمة: ${a.service_name || "—"}\nالتاريخ: ${dateStr}\nالوقت: ${a.time || "—"}\n${a.notes ? "ملاحظات: " + a.notes + "\n" : ""}\nفي انتظاركم!\n${settings.shop_name}`;
+    const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    try {
+      window.location.href = mailto;
+    } catch {
+      window.open(mailto, "_blank", "noopener");
+    }
+  };
+
+  const printAppt = async (a) => {
+    setShareAppt(a);
+    // Wait one tick so the hidden receipt has rendered before capturing it.
+    await new Promise((r) => setTimeout(r, 80));
+    try {
+      if (!shareReceiptRef.current) throw new Error("Receipt not rendered");
+      await exportAppointmentToPdf(
+        shareReceiptRef.current,
+        `appointment_${a.customer_name || ""}_${a.date || ""}`,
+      );
+      toast.success(lang === "de" ? "PDF bereit" : "PDF جاهز");
+    } catch (e) {
+      toast.error(e?.message || "Print error");
+    } finally {
+      setShareAppt(null);
+    }
   };
 
   // ---------- Calendar helpers ----------
@@ -345,6 +431,24 @@ export default function Appointments() {
                   <div className="text-sm text-muted-foreground">{a.service_name}</div>
                   {a.notes && <div className="text-xs text-muted-foreground mt-1">{a.notes}</div>}
                   <div className="flex justify-end gap-1 mt-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => sendApptEmail(a)}
+                      title={lang === "de" ? "Bestätigung per E-Mail" : "تأكيد بالبريد"}
+                      data-testid={`day-email-${a.id}`}
+                    >
+                      <Mail size={12} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => printAppt(a)}
+                      title={lang === "de" ? "Termin drucken" : "طباعة الموعد"}
+                      data-testid={`day-print-${a.id}`}
+                    >
+                      <Printer size={12} />
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => edit(a)}><Pencil size={12} /></Button>
                     <Button variant="ghost" size="sm" className="text-destructive" onClick={() => del(a.id)}><Trash2 size={12} /></Button>
                   </div>
@@ -379,6 +483,26 @@ export default function Appointments() {
                         <div className="flex items-center justify-between mb-3">
                           <Badge className={cls + " border-0"}>{lbl}</Badge>
                           <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-10 w-10"
+                              onClick={() => sendApptEmail(a)}
+                              title={lang === "de" ? "Bestätigung per E-Mail" : "تأكيد بالبريد"}
+                              data-testid={`appt-email-${a.id}`}
+                            >
+                              <Mail size={12} />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-10 w-10"
+                              onClick={() => printAppt(a)}
+                              title={lang === "de" ? "Termin drucken" : "طباعة الموعد"}
+                              data-testid={`appt-print-${a.id}`}
+                            >
+                              <Printer size={12} />
+                            </Button>
                             <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => edit(a)}><Pencil size={12} /></Button>
                             <Button variant="ghost" size="icon" className="h-10 w-10 text-destructive" onClick={() => del(a.id)}><Trash2 size={12} /></Button>
                           </div>
@@ -396,6 +520,18 @@ export default function Appointments() {
             ))}
           </div>
         </>
+      )}
+
+      {/* Off-screen appointment receipt — captured for PDF print */}
+      {shareAppt && (
+        <AppointmentReceipt
+          ref={shareReceiptRef}
+          appt={shareAppt}
+          settings={settings}
+          lang={lang}
+          dir={dir}
+          widthMm={80}
+        />
       )}
     </div>
   );

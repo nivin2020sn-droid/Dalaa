@@ -3,6 +3,16 @@ import { api } from "../api";
 
 const SettingsContext = createContext(null);
 
+const DEFAULT_WHATSAPP_TEMPLATE_DE = `Hallo 👋
+Ihre Rechnung von {{shop_name}} ist fertig.
+
+Rechnungsnummer: {{invoice_number}}
+Betrag: {{total_amount}} €
+
+Wenn Sie eine PDF-Version wünschen, geben Sie bitte kurz Bescheid.
+
+Vielen Dank für Ihren Besuch 🌸`;
+
 const DEFAULTS = {
   shop_name: "Dalaa Beauty",
   tagline: "Salon & Beauty",
@@ -13,7 +23,11 @@ const DEFAULTS = {
   email: "",
   tax_id: "",
   receipt_footer: "Vielen Dank für Ihren Besuch — شكراً لزيارتكم",
+  whatsapp_template: DEFAULT_WHATSAPP_TEMPLATE_DE,
+  update_url: "",
 };
+
+export const DEFAULT_WHATSAPP_TEMPLATE = DEFAULT_WHATSAPP_TEMPLATE_DE;
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(DEFAULTS);

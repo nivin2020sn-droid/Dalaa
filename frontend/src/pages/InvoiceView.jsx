@@ -6,10 +6,11 @@ import { useSettings } from "../context/SettingsContext";
 import { useI18n } from "../i18n/I18nContext";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Printer, ArrowRight, ArrowLeft, Sparkles, FileDown, Ban, MessageCircle, Mail } from "lucide-react";
-import { exportInvoiceToPdf, shareInvoiceToWhatsApp, shareInvoiceByEmail } from "../services/pdf";
+import { Printer, ArrowRight, ArrowLeft, Sparkles, FileDown, Ban, MessageCircle, Mail, Receipt as ReceiptIcon, Send } from "lucide-react";
+import { exportInvoiceToPdf, exportReceiptToPdf, shareInvoiceByEmail } from "../services/pdf";
 import { QRCodeCanvas } from "qrcode.react";
 import { toast } from "sonner";
+import InvoiceReceipt from "../components/InvoiceReceipt";
 
 const payLabels = {
   cash: { ar: "نقداً", de: "Bar" },
@@ -20,13 +21,28 @@ const payLabels = {
 export default function InvoiceView() {
   const { id } = useParams();
   const [inv, setInv] = useState(null);
+  const [customer, setCustomer] = useState(null);
   const navigate = useNavigate();
   const { settings } = useSettings();
   const { t, lang, dir } = useI18n();
   const printRef = useRef(null);
+  const receipt80Ref = useRef(null);
+  const receipt58Ref = useRef(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { api.get(`/invoices/${id}`).then((r) => setInv(r.data)); }, [id]);
+
+  // Pre-fetch the linked customer (if any) so WhatsApp/Email buttons can
+  // surface contact info instantly without an extra round-trip on click.
+  useEffect(() => {
+    if (!inv?.customer_id) { setCustomer(null); return; }
+    let cancelled = false;
+    api.get("/customers").then((r) => {
+      if (cancelled) return;
+      setCustomer((r.data || []).find((x) => x.id === inv.customer_id) || null);
+    }).catch(() => setCustomer(null));
+    return () => { cancelled = true; };
+  }, [inv?.customer_id]);
 
   if (!inv) return <div className="text-muted-foreground">{t("common.loading")}</div>;
 
@@ -53,6 +69,7 @@ export default function InvoiceView() {
     return true;
   };
 
+  // Render the invoice template into an A4 PDF and share/save it.
   const handlePdf = async () => {
     if (!assertOfficial()) return;
     setBusy(true);
@@ -66,68 +83,110 @@ export default function InvoiceView() {
     }
   };
 
-  const handleEmail = async () => {
+  // Render the receipt template into a thermal-roll PDF (80mm by default).
+  const handleReceiptPdf = async (widthMm = 80) => {
     if (!assertOfficial()) return;
-    let email = "";
-    if (inv.customer_id) {
-      try {
-        const r = await api.get(`/customers`);
-        const c = (r.data || []).find((x) => x.id === inv.customer_id);
-        if (c?.email) email = c.email;
-      } catch { /* ignore */ }
-    }
-    const entered = window.prompt(
-      lang === "de" ? "E-Mail-Adresse des Kunden:" : "البريد الإلكتروني للعميل:",
-      email || "",
-    );
-    if (entered === null) return; // user cancelled
+    const node = widthMm === 58 ? receipt58Ref.current : receipt80Ref.current;
+    if (!node) return;
     setBusy(true);
     try {
-      const subject = lang === "de"
-        ? `Rechnung ${inv.invoice_number} — ${settings.shop_name}`
-        : `فاتورة رقم ${inv.invoice_number} — ${settings.shop_name}`;
-      const body = lang === "de"
-        ? `Sehr geehrter Kunde,\n\nim Anhang finden Sie die Rechnung ${inv.invoice_number} über ${fmtEUR(inv.total)}.\n\nVielen Dank für Ihren Besuch!\n${settings.shop_name}`
-        : `عزيزنا العميل،\n\nمرفق فاتورتكم رقم ${inv.invoice_number} بقيمة ${fmtEUR(inv.total)}.\n\nشكراً لزيارتكم!\n${settings.shop_name}`;
-      await shareInvoiceByEmail(printRef.current, inv.invoice_number, entered, subject, body);
+      await exportReceiptToPdf(node, inv.invoice_number, widthMm);
+      toast.success(
+        (lang === "de" ? "Beleg " : "إيصال ") + widthMm + "mm " + (lang === "de" ? "bereit" : "جاهز"),
+      );
     } catch (e) {
-      toast.error(e?.message || "Email error");
+      toast.error(e?.message || "Receipt error");
     } finally {
       setBusy(false);
     }
   };
 
+  // Fill {{placeholders}} with values from the current invoice / settings.
+  const fillTemplate = (template) => {
+    const map = {
+      "{{invoice_number}}": inv.invoice_number,
+      "{{total_amount}}": fmtEUR(inv.total).replace(/\s?€$/, "").trim(),
+      "{{customer_name}}": inv.customer_name || "",
+      "{{shop_name}}": settings.shop_name || "",
+    };
+    return Object.keys(map).reduce(
+      (acc, k) => acc.split(k).join(map[k]),
+      String(template || ""),
+    );
+  };
+
+  // === EMAIL — text-only via mailto: (no API, no internet) ===
+  const handleEmail = async () => {
+    if (!assertOfficial()) return;
+    let email = customer?.email || "";
+    if (!email) {
+      const entered = window.prompt(
+        lang === "de" ? "E-Mail-Adresse des Kunden:" : "البريد الإلكتروني للعميل:",
+        "",
+      );
+      if (entered === null) return;
+      email = entered.trim();
+    }
+    if (!email) {
+      toast.error(lang === "de" ? "Keine E-Mail vorhanden" : "لا يوجد بريد إلكتروني");
+      return;
+    }
+    const subject = lang === "de"
+      ? `Rechnung ${inv.invoice_number} — ${settings.shop_name}`
+      : `فاتورة رقم ${inv.invoice_number} — ${settings.shop_name}`;
+    const body = lang === "de"
+      ? `Hallo,\n\nIhre Rechnung ${inv.invoice_number} über ${fmtEUR(inv.total)} ist fertig.\n\nVielen Dank für Ihren Besuch!\n${settings.shop_name}`
+      : `مرحباً،\n\nفاتورتكم رقم ${inv.invoice_number} بقيمة ${fmtEUR(inv.total)} جاهزة.\n\nشكراً لزيارتكم!\n${settings.shop_name}`;
+    const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    try {
+      window.location.href = mailto;
+    } catch {
+      window.open(mailto, "_blank", "noopener");
+    }
+  };
+
+  // === WHATSAPP — text-only chat (no PDF attached) ===
   const handleWhatsApp = async () => {
     if (!assertOfficial()) return;
-    // Look up the customer's phone (if any) and let user confirm/edit.
-    let phone = "";
-    if (inv.customer_id) {
-      try {
-        const r = await api.get(`/customers`);
-        const c = (r.data || []).find((x) => x.id === inv.customer_id);
-        if (c?.phone) phone = c.phone;
-      } catch { /* ignore */ }
+    let phone = customer?.phone || "";
+    if (!phone) {
+      const entered = window.prompt(
+        lang === "de"
+          ? "WhatsApp-Nummer des Kunden (mit Ländervorwahl, z. B. 4917612345678):"
+          : "رقم واتساب العميل (برمز الدولة، مثلاً 4917612345678):",
+        "",
+      );
+      if (entered === null) return;
+      phone = entered;
     }
-    const entered = window.prompt(
-      lang === "de"
-        ? "WhatsApp-Nummer des Kunden (mit Ländervorwahl, z. B. 4917612345678):"
-        : "رقم واتساب العميل (برمز الدولة، مثلاً 4917612345678):",
-      phone || "",
-    );
-    if (!entered) return;
-    const cleaned = String(entered).replace(/[^\d]/g, "");
+    const cleaned = String(phone).replace(/[^\d]/g, "");
     if (!cleaned) {
       toast.error(lang === "de" ? "Ungültige Nummer" : "رقم غير صالح");
       return;
     }
+    const tpl = settings.whatsapp_template || "";
+    const messageText = fillTemplate(tpl);
+    const waUrl = `https://wa.me/${encodeURIComponent(cleaned)}?text=${encodeURIComponent(messageText)}`;
+    try {
+      window.open(waUrl, "_blank", "noopener");
+    } catch {
+      window.location.href = waUrl;
+    }
+  };
+
+  // === SEND PDF — generate PDF and open share sheet so user picks WhatsApp / Mail / Drive ===
+  const handleSendPdf = async () => {
+    if (!assertOfficial()) return;
     setBusy(true);
     try {
-      const messageText = lang === "de"
-        ? `${settings.shop_name}\nRechnung ${inv.invoice_number}\nGesamt: ${fmtEUR(inv.total)}\nVielen Dank!`
-        : `${settings.shop_name}\nفاتورة رقم ${inv.invoice_number}\nالإجمالي: ${fmtEUR(inv.total)}\nشكراً لزيارتكم!`;
-      await shareInvoiceToWhatsApp(printRef.current, inv.invoice_number, cleaned, messageText);
+      // Reuse the email-share path (it embeds the PDF); pre-fill subject/body.
+      const subject = lang === "de"
+        ? `Rechnung ${inv.invoice_number} — ${settings.shop_name}`
+        : `فاتورة رقم ${inv.invoice_number} — ${settings.shop_name}`;
+      const body = fillTemplate(settings.whatsapp_template || "");
+      await shareInvoiceByEmail(printRef.current, inv.invoice_number, customer?.email || "", subject, body);
     } catch (e) {
-      toast.error(e?.message || "WhatsApp error");
+      toast.error(e?.message || "Share error");
     } finally {
       setBusy(false);
     }
@@ -170,13 +229,34 @@ export default function InvoiceView() {
             <Printer size={16} className="mx-1" /> {t("common.print")}
           </Button>
           <Button className="h-11" onClick={handlePdf} disabled={busy || !isOfficial} data-testid="pdf-invoice-button">
-            <FileDown size={16} className="mx-1" /> {t("inv.pdf_button")}
+            <FileDown size={16} className="mx-1" /> A4 PDF
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11"
+            onClick={() => handleReceiptPdf(80)}
+            disabled={busy || !isOfficial}
+            data-testid="receipt-80-button"
+            title={lang === "de" ? "Bon-Druck 80mm" : "إيصال 80mm"}
+          >
+            <ReceiptIcon size={16} className="mx-1" /> 80mm
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11"
+            onClick={() => handleReceiptPdf(58)}
+            disabled={busy || !isOfficial}
+            data-testid="receipt-58-button"
+            title={lang === "de" ? "Bon-Druck 58mm" : "إيصال 58mm"}
+          >
+            <ReceiptIcon size={16} className="mx-1" /> 58mm
           </Button>
           <Button
             className="h-11 bg-emerald-600 hover:bg-emerald-700 text-white"
             onClick={handleWhatsApp}
             disabled={busy || !isOfficial}
             data-testid="whatsapp-invoice-button"
+            title={lang === "de" ? "WhatsApp-Text senden" : "إرسال نص واتساب"}
           >
             <MessageCircle size={16} className="mx-1" /> {lang === "de" ? "WhatsApp" : "واتساب"}
           </Button>
@@ -186,8 +266,19 @@ export default function InvoiceView() {
             onClick={handleEmail}
             disabled={busy || !isOfficial}
             data-testid="email-invoice-button"
+            title={lang === "de" ? "E-Mail (Text)" : "بريد (نص)"}
           >
             <Mail size={16} className="mx-1" /> {lang === "de" ? "E-Mail" : "بريد"}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11"
+            onClick={handleSendPdf}
+            disabled={busy || !isOfficial}
+            data-testid="send-pdf-invoice-button"
+            title={lang === "de" ? "PDF teilen" : "إرسال PDF"}
+          >
+            <Send size={16} className="mx-1" /> {lang === "de" ? "PDF senden" : "إرسال PDF"}
           </Button>
           {!isReversal && (
             <Button variant="destructive" className="h-11" onClick={handleStorno} disabled={busy} data-testid="storno-from-view-button">
@@ -381,6 +472,24 @@ export default function InvoiceView() {
           </div>
         )}
       </Card>
+
+      {/* Off-screen receipt templates — captured by html2canvas for thermal PDFs */}
+      <InvoiceReceipt
+        ref={receipt80Ref}
+        inv={inv}
+        settings={settings}
+        lang={lang}
+        dir={dir}
+        widthMm={80}
+      />
+      <InvoiceReceipt
+        ref={receipt58Ref}
+        inv={inv}
+        settings={settings}
+        lang={lang}
+        dir={dir}
+        widthMm={58}
+      />
     </div>
   );
 }

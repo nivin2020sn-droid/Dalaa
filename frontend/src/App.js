@@ -22,6 +22,7 @@ import PendingArchive from "./pages/PendingArchive";
 import SettingsPage from "./pages/Settings";
 import Account from "./pages/Account";
 import { startBackupScheduler } from "./services/backup";
+import UpdateChecker from "./components/UpdateChecker";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -60,6 +61,7 @@ function App() {
         <SettingsProvider>
           <BrowserRouter>
             <BootEffects />
+            <UpdateChecker />
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route
