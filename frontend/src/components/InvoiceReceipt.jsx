@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import { fmtEUR, fmtDate } from "../api";
-import { QRCodeCanvas } from "qrcode.react";
+import { QRCodeSVG } from "qrcode.react";
 
 /**
  * Thermal-receipt layout for an invoice (58mm or 80mm rolls).
@@ -106,26 +106,26 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
       )}
 
       {/* Meta */}
-      <div style={{ fontSize: "20px", marginBottom: "8px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <div style={{ fontSize: "20px", marginBottom: "8px", lineHeight: 1.5 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
           <span>{lang === "de" ? "Beleg-Nr." : "رقم الفاتورة"}</span>
           <span style={{ fontFamily: "monospace", fontWeight: 700 }}>
             {inv.invoice_number}
           </span>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
           <span>{lang === "de" ? "Datum" : "التاريخ"}</span>
           <span>{fmtDate(inv.created_at, lang)}</span>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
           <span>{lang === "de" ? "Kunde" : "العميل"}</span>
           <span>{inv.customer_name}</span>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
           <span>{lang === "de" ? "Kassierer" : "الكاشير"}</span>
           <span>{inv.cashier_name}</span>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
           <span>{lang === "de" ? "Zahlung" : "الدفع"}</span>
           <span>{pay}</span>
         </div>
@@ -134,11 +134,11 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
       <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }} />
 
       {/* Items */}
-      <div style={{ fontSize: "20px" }}>
+      <div style={{ fontSize: "20px", lineHeight: 1.5 }}>
         {(inv.items || []).map((it, i) => (
-          <div key={i} style={{ marginBottom: "6px" }}>
+          <div key={i} style={{ marginBottom: "8px" }}>
             <div style={{ fontWeight: 700 }}>{it.name}</div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
               <span>
                 {it.quantity} × {fmtEUR(it.unit_price)}{" "}
                 <span style={{ color: "#666", fontSize: "16px" }}>
@@ -154,22 +154,22 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
       <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }} />
 
       {/* Totals */}
-      <div style={{ fontSize: "20px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <div style={{ fontSize: "20px", lineHeight: 1.5 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
           <span>{lang === "de" ? "Netto" : "الصافي"}</span>
           <span>{fmtEUR(inv.net_total ?? inv.subtotal)}</span>
         </div>
         {(inv.vat_breakdown || []).map((b) => (
           <div
             key={b.rate}
-            style={{ display: "flex", justifyContent: "space-between" }}
+            style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}
           >
             <span>MwSt {b.rate}%</span>
             <span>{fmtEUR(b.vat)}</span>
           </div>
         ))}
         {inv.discount > 0 && (
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
             <span>{lang === "de" ? "Rabatt" : "خصم"}</span>
             <span>-{fmtEUR(inv.discount)}</span>
           </div>
@@ -178,11 +178,13 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
           style={{
             display: "flex",
             justifyContent: "space-between",
+            gap: "12px",
             marginTop: "6px",
             paddingTop: "6px",
             borderTop: "2px solid #000",
             fontSize: "26px",
             fontWeight: 800,
+            lineHeight: 1.4,
           }}
         >
           <span>{lang === "de" ? "GESAMT" : "الإجمالي"}</span>
@@ -204,7 +206,7 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
                 marginBottom: "6px",
               }}
             >
-              <QRCodeCanvas
+              <QRCodeSVG
                 value={inv.tse_qr_code}
                 size={140}
                 includeMargin={false}
@@ -237,9 +239,6 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
       <div style={{ textAlign: "center", fontSize: "18px", color: "#444", marginTop: "8px" }}>
         {settings.receipt_footer ||
           (lang === "de" ? "Vielen Dank für Ihren Besuch" : "شكراً لزيارتكم")}
-      </div>
-      <div style={{ textAlign: "center", fontSize: "14px", color: "#888", marginTop: "10px" }}>
-        Bahaa Nasser
       </div>
     </div>
   );

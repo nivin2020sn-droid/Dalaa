@@ -113,9 +113,6 @@ const AppointmentReceipt = forwardRef(function AppointmentReceipt(
           ? "Wir freuen uns auf Ihren Besuch!"
           : "في انتظاركم!"}
       </div>
-      <div style={{ textAlign: "center", fontSize: "14px", color: "#888", marginTop: "10px" }}>
-        Bahaa Nasser
-      </div>
     </div>
   );
 });
