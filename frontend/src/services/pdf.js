@@ -208,21 +208,28 @@ export async function shareInvoiceByEmail(domNode, filename, recipientEmail, sub
  * actual PRINTABLE area on those rolls (72mm for 80mm rolls, 50mm for 58mm
  * rolls), with NO outer margin so nothing gets clipped by the printer's
  * non-printable border.
+ *
+ * The receipt template renders ON-SCREEN (top:0, left:0) with `opacity:0`
+ * so html2canvas always sees real layout dimensions. The cloned node has
+ * its opacity restored to 1 inside `onclone` so the bitmap is opaque.
  */
 export async function exportReceiptToPdf(domNode, filename, printerMm = 80) {
   if (!domNode) throw new Error("Receipt DOM node not found");
 
-  // Roll → printable mapping. These are the safe printable widths for
-  // typical thermal printers (POS-58 / POS-80) and avoid right-edge clipping.
+  // Roll → printable area mapping. These widths avoid right-edge clipping
+  // on typical POS-58 / POS-80 thermal printers.
   const PAGE_MM = printerMm === 58 ? 50 : 72;
 
-  // Force layout to the DOM's intrinsic width (set by InvoiceReceipt) so
-  // html2canvas doesn't pick up viewport overflow on RTL/long content.
+  // Capture exactly the receipt's intrinsic box. Don't trust the document
+  // viewport — the receipt sets its own width via inline CSS.
   const renderWidth = domNode.offsetWidth;
   const renderHeight = domNode.offsetHeight;
+  if (!renderWidth || !renderHeight) {
+    throw new Error("Receipt template not laid out yet");
+  }
 
   const canvas = await html2canvas(domNode, {
-    scale: 2,
+    scale: 3, // crisp output for the small width
     useCORS: true,
     backgroundColor: "#ffffff",
     logging: false,
@@ -230,10 +237,24 @@ export async function exportReceiptToPdf(domNode, filename, printerMm = 80) {
     height: renderHeight,
     windowWidth: renderWidth,
     windowHeight: renderHeight,
+    foreignObjectRendering: false,
+    removeContainer: true,
+    // Restore opacity on the clone so the PNG is opaque, not transparent.
+    onclone: (doc, clonedNode) => {
+      try {
+        clonedNode.style.opacity = "1";
+        clonedNode.style.position = "static";
+        clonedNode.style.top = "auto";
+        clonedNode.style.left = "auto";
+        clonedNode.style.zIndex = "auto";
+      } catch {
+        /* ignore */
+      }
+    },
   });
   const imgData = canvas.toDataURL("image/png");
 
-  // Page = exactly printable area; height auto from aspect ratio.
+  // PDF page = exactly the printable area; height auto-derived from aspect.
   const aspect = canvas.height / canvas.width;
   const pageHeight = Math.max(40, PAGE_MM * aspect);
 
@@ -243,7 +264,7 @@ export async function exportReceiptToPdf(domNode, filename, printerMm = 80) {
     orientation: "portrait",
   });
 
-  // No margin — the receipt template already has its own internal padding.
+  // No margin — the receipt template already has internal padding.
   pdf.addImage(imgData, "PNG", 0, 0, PAGE_MM, pageHeight);
 
   const safeFilename = (filename || "receipt") + `_${printerMm}mm.pdf`;
