@@ -202,6 +202,37 @@ export async function shareInvoiceByEmail(domNode, filename, recipientEmail, sub
 }
 
 /**
+ * Wait for every <img> inside `node` to finish loading (or to error out).
+ * Critical for thermal-receipt capture: the TSE QR is embedded as a data-URL
+ * <img>, which is normally instant — but when the receipt was just mounted
+ * the image element may not have decoded yet, causing html2canvas to capture
+ * an empty placeholder. This helper makes the capture deterministic.
+ */
+async function waitForImages(node, timeoutMs = 3000) {
+  if (!node) return;
+  const imgs = Array.from(node.querySelectorAll("img"));
+  if (imgs.length === 0) return;
+  await Promise.race([
+    Promise.all(
+      imgs.map((img) =>
+        img.complete && img.naturalWidth > 0
+          ? Promise.resolve()
+          : new Promise((resolve) => {
+              const done = () => {
+                img.removeEventListener("load", done);
+                img.removeEventListener("error", done);
+                resolve();
+              };
+              img.addEventListener("load", done);
+              img.addEventListener("error", done);
+            }),
+      ),
+    ),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
+/**
  * Generate a thermal-receipt PDF (58mm or 80mm wide rolls) from a hidden DOM
  * node styled as a receipt. Uses the DOM node's natural pixel width so
  * Arabic / German text renders via the browser font stack.
@@ -212,9 +243,13 @@ export async function shareInvoiceByEmail(domNode, filename, recipientEmail, sub
 export async function exportReceiptToPdf(domNode, filename, widthMm = 80) {
   if (!domNode) throw new Error("Receipt DOM node not found");
 
+  // Wait for the TSE QR <img> (data-URL) to finish decoding before snapshot.
+  await waitForImages(domNode);
+
   const canvas = await html2canvas(domNode, {
     scale: 2,
     useCORS: true,
+    allowTaint: true,
     backgroundColor: "#ffffff",
     logging: false,
     windowWidth: domNode.scrollWidth,
