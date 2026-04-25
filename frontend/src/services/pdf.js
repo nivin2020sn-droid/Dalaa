@@ -202,43 +202,51 @@ export async function shareInvoiceByEmail(domNode, filename, recipientEmail, sub
 }
 
 /**
- * Generate a thermal-receipt PDF (58mm or 80mm wide rolls) from a hidden DOM
- * node styled as a receipt. Uses the DOM node's natural pixel width so
- * Arabic / German text renders via the browser font stack.
+ * Generate a thermal-receipt PDF from a hidden DOM node styled as a receipt.
  *
- * On Android (Capacitor): saves to Cache and opens the share sheet.
- * On Web: triggers a browser download.
+ * `printerMm` is the ROLL width (80 or 58). The PDF page is sized to the
+ * actual PRINTABLE area on those rolls (72mm for 80mm rolls, 50mm for 58mm
+ * rolls), with NO outer margin so nothing gets clipped by the printer's
+ * non-printable border.
  */
-export async function exportReceiptToPdf(domNode, filename, widthMm = 80) {
+export async function exportReceiptToPdf(domNode, filename, printerMm = 80) {
   if (!domNode) throw new Error("Receipt DOM node not found");
+
+  // Roll → printable mapping. These are the safe printable widths for
+  // typical thermal printers (POS-58 / POS-80) and avoid right-edge clipping.
+  const PAGE_MM = printerMm === 58 ? 50 : 72;
+
+  // Force layout to the DOM's intrinsic width (set by InvoiceReceipt) so
+  // html2canvas doesn't pick up viewport overflow on RTL/long content.
+  const renderWidth = domNode.offsetWidth;
+  const renderHeight = domNode.offsetHeight;
 
   const canvas = await html2canvas(domNode, {
     scale: 2,
     useCORS: true,
     backgroundColor: "#ffffff",
     logging: false,
-    windowWidth: domNode.scrollWidth,
-    windowHeight: domNode.scrollHeight,
+    width: renderWidth,
+    height: renderHeight,
+    windowWidth: renderWidth,
+    windowHeight: renderHeight,
   });
   const imgData = canvas.toDataURL("image/png");
 
-  // Page width = roll width; page height = scaled image height + small padding.
-  const pageWidth = widthMm;
+  // Page = exactly printable area; height auto from aspect ratio.
   const aspect = canvas.height / canvas.width;
-  const pageHeight = Math.max(60, pageWidth * aspect + 6);
+  const pageHeight = Math.max(40, PAGE_MM * aspect);
 
   const pdf = new jsPDF({
     unit: "mm",
-    format: [pageWidth, pageHeight],
+    format: [PAGE_MM, pageHeight],
     orientation: "portrait",
   });
 
-  const margin = 2;
-  const usableWidth = pageWidth - margin * 2;
-  const imgHeight = usableWidth * aspect;
-  pdf.addImage(imgData, "PNG", margin, margin, usableWidth, imgHeight);
+  // No margin — the receipt template already has its own internal padding.
+  pdf.addImage(imgData, "PNG", 0, 0, PAGE_MM, pageHeight);
 
-  const safeFilename = (filename || "receipt") + `_${widthMm}mm.pdf`;
+  const safeFilename = (filename || "receipt") + `_${printerMm}mm.pdf`;
 
   if (Capacitor.isNativePlatform()) {
     const base64 = pdf.output("datauristring").split(",")[1];

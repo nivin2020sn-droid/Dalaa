@@ -3,15 +3,21 @@ import { fmtEUR, fmtDate } from "../api";
 import { QRCodeCanvas } from "qrcode.react";
 
 /**
- * Thermal-receipt layout for an invoice (58mm or 80mm rolls).
+ * Thermal-receipt template — an entirely separate layout from the A4
+ * invoice. Designed for narrow rolls (58mm / 80mm).
  *
- * Designed to be rendered hidden off-screen, captured by html2canvas, and
- * embedded into a narrow jsPDF page. The DOM is drawn at a fixed pixel
- * width so the PDF target width (in mm) is just a scaling factor.
+ * The DOM is rendered at a FIXED pixel width that maps directly to the
+ * printable area:
+ *   80mm roll → 72mm printable → 576px @ 8px/mm (safely fits, no clipping).
+ *   58mm roll → 50mm printable → 400px @ 8px/mm.
  *
- * Width reference (96dpi):
- *   58mm ≈ 219px      (printable area ≈ 48mm)
- *   80mm ≈ 302px      (printable area ≈ 72mm)
+ * IMPORTANT — design rules to keep content inside the roll width:
+ *   - Single column. No flex `space-between` on rows that contain
+ *     long unbreakable strings (RTL+long-strings can blow the box).
+ *   - Two-column rows use a fixed-width <table> so columns can never push
+ *     each other out of the page.
+ *   - Every container has `box-sizing: border-box` and `overflow: hidden`.
+ *   - Long tokens (TSE serial, QR payload meta) use `wordBreak: break-all`.
  */
 const payLabels = {
   cash: { ar: "نقداً", de: "Bar" },
@@ -20,16 +26,66 @@ const payLabels = {
 };
 
 const InvoiceReceipt = forwardRef(function InvoiceReceipt(
-  { inv, settings, lang, dir, widthMm = 80 },
+  { inv, settings, lang, dir, printerMm = 80 },
   ref,
 ) {
   if (!inv) return null;
 
-  // Render at ~3x the physical width in pixels for a crisp 200dpi-ish capture.
-  // jsPDF will scale the resulting bitmap down to widthMm.
-  const renderWidthPx = Math.round(widthMm * 3.78 * 2.4); // ≈ 725px @ 80mm
+  // Render width in CSS pixels. ~8px per mm of printable width keeps the
+  // bitmap crisp without inflating the PDF unnecessarily. html2canvas will
+  // also apply scale=2 for sharper output.
+  const renderWidthPx = printerMm === 58 ? 400 : 576;
   const isReversal = inv.status === "reversal";
   const pay = payLabels[inv.payment_method]?.[lang] || inv.payment_method;
+
+  // Compact font scale — 80mm fits ~32 chars per line at 13px / 14px.
+  const FONT_BODY = printerMm === 58 ? 13 : 14;
+  const FONT_SMALL = printerMm === 58 ? 11 : 12;
+  const FONT_LARGE = printerMm === 58 ? 17 : 18;
+  const FONT_TOTAL = printerMm === 58 ? 19 : 22;
+  const PAD_X = printerMm === 58 ? 10 : 14;
+
+  // Helper for two-column rows that absolutely must not overflow.
+  const Row = ({ left, right, bold = false, total = false }) => (
+    <table
+      style={{
+        width: "100%",
+        borderCollapse: "collapse",
+        fontSize: total ? FONT_TOTAL : FONT_BODY,
+        fontWeight: total ? 800 : bold ? 700 : 400,
+        margin: "1px 0",
+        tableLayout: "fixed",
+      }}
+    >
+      <tbody>
+        <tr>
+          <td
+            style={{
+              padding: 0,
+              textAlign: dir === "rtl" ? "right" : "left",
+              wordBreak: "break-word",
+              overflow: "hidden",
+              verticalAlign: "top",
+            }}
+          >
+            {left}
+          </td>
+          <td
+            style={{
+              padding: 0,
+              textAlign: dir === "rtl" ? "left" : "right",
+              wordBreak: "break-word",
+              overflow: "hidden",
+              verticalAlign: "top",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {right}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
 
   return (
     <div
@@ -40,52 +96,61 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
         top: "-10000px",
         left: "-10000px",
         width: `${renderWidthPx}px`,
+        boxSizing: "border-box",
         background: "#ffffff",
         color: "#000000",
         fontFamily:
-          "'Inter', 'Cairo', 'Tajawal', system-ui, -apple-system, Segoe UI, sans-serif",
-        padding: "16px",
+          "'Cairo', 'Tajawal', 'Inter', system-ui, -apple-system, Segoe UI, sans-serif",
+        padding: `12px ${PAD_X}px`,
         direction: dir,
-        fontSize: "22px",
-        lineHeight: "1.35",
-        boxSizing: "border-box",
+        fontSize: `${FONT_BODY}px`,
+        lineHeight: 1.35,
+        overflow: "hidden",
+        wordBreak: "break-word",
       }}
     >
-      {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: "10px" }}>
+      {/* === Header (centered) === */}
+      <div style={{ textAlign: "center", marginBottom: "6px" }}>
         {settings.logo_url && (
           <img
             src={settings.logo_url}
             alt=""
             style={{
-              width: "72px",
-              height: "72px",
+              width: "60px",
+              height: "60px",
               objectFit: "cover",
-              borderRadius: "8px",
-              margin: "0 auto 6px",
+              borderRadius: "6px",
+              display: "block",
+              margin: "0 auto 4px",
             }}
           />
         )}
-        <div style={{ fontSize: "30px", fontWeight: 800 }}>{settings.shop_name}</div>
+        <div style={{ fontSize: `${FONT_LARGE + 4}px`, fontWeight: 800, lineHeight: 1.2 }}>
+          {settings.shop_name}
+        </div>
         {settings.tagline && (
-          <div style={{ fontSize: "20px", color: "#444" }}>{settings.tagline}</div>
+          <div style={{ fontSize: `${FONT_SMALL}px`, color: "#444" }}>
+            {settings.tagline}
+          </div>
         )}
         {settings.address && (
-          <div style={{ fontSize: "18px", color: "#444" }}>{settings.address}</div>
+          <div style={{ fontSize: `${FONT_SMALL}px`, color: "#444" }}>
+            {settings.address}
+          </div>
         )}
         {settings.phone && (
-          <div style={{ fontSize: "18px", color: "#444" }}>
+          <div style={{ fontSize: `${FONT_SMALL}px`, color: "#444" }}>
             {lang === "de" ? "Tel" : "هاتف"}: {settings.phone}
           </div>
         )}
         {settings.tax_id && (
-          <div style={{ fontSize: "18px", color: "#444" }}>
+          <div style={{ fontSize: `${FONT_SMALL}px`, color: "#444" }}>
             {lang === "de" ? "USt-IdNr." : "الرقم الضريبي"}: {settings.tax_id}
           </div>
         )}
       </div>
 
-      <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }} />
+      <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
 
       {isReversal && (
         <div
@@ -93,139 +158,113 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
             textAlign: "center",
             background: "#fff5e6",
             border: "1px solid #f5b54a",
-            padding: "6px",
-            marginBottom: "8px",
+            padding: "4px",
+            marginBottom: "6px",
             fontWeight: 800,
+            fontSize: `${FONT_BODY}px`,
           }}
         >
           {lang === "de" ? "STORNORECHNUNG" : "فاتورة إلغاء"}
-          <div style={{ fontSize: "18px", fontWeight: 600 }}>
+          <div style={{ fontSize: `${FONT_SMALL}px`, fontWeight: 600 }}>
             ⟵ {inv.storno_of_number}
           </div>
         </div>
       )}
 
-      {/* Meta */}
-      <div style={{ fontSize: "20px", marginBottom: "8px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>{lang === "de" ? "Beleg-Nr." : "رقم الفاتورة"}</span>
-          <span style={{ fontFamily: "monospace", fontWeight: 700 }}>
-            {inv.invoice_number}
-          </span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>{lang === "de" ? "Datum" : "التاريخ"}</span>
-          <span>{fmtDate(inv.created_at, lang)}</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>{lang === "de" ? "Kunde" : "العميل"}</span>
-          <span>{inv.customer_name}</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>{lang === "de" ? "Kassierer" : "الكاشير"}</span>
-          <span>{inv.cashier_name}</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>{lang === "de" ? "Zahlung" : "الدفع"}</span>
-          <span>{pay}</span>
-        </div>
-      </div>
+      {/* === Meta === */}
+      <Row
+        left={lang === "de" ? "Beleg-Nr." : "رقم الفاتورة"}
+        right={<span style={{ fontFamily: "monospace", fontWeight: 700 }}>{inv.invoice_number}</span>}
+      />
+      <Row left={lang === "de" ? "Datum" : "التاريخ"} right={fmtDate(inv.created_at, lang)} />
+      <Row left={lang === "de" ? "Kunde" : "العميل"} right={inv.customer_name} />
+      <Row left={lang === "de" ? "Kassierer" : "الكاشير"} right={inv.cashier_name} />
+      <Row left={lang === "de" ? "Zahlung" : "الدفع"} right={pay} />
 
-      <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }} />
+      <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
 
-      {/* Items */}
-      <div style={{ fontSize: "20px" }}>
+      {/* === Items === */}
+      <div>
         {(inv.items || []).map((it, i) => (
-          <div key={i} style={{ marginBottom: "6px" }}>
-            <div style={{ fontWeight: 700 }}>{it.name}</div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span>
-                {it.quantity} × {fmtEUR(it.unit_price)}{" "}
-                <span style={{ color: "#666", fontSize: "16px" }}>
-                  ({it.vat_rate}%)
-                </span>
-              </span>
-              <span style={{ fontWeight: 700 }}>{fmtEUR(it.total)}</span>
+          <div
+            key={i}
+            style={{
+              marginBottom: "5px",
+              fontSize: `${FONT_BODY}px`,
+            }}
+          >
+            <div style={{ fontWeight: 700, wordBreak: "break-word" }}>
+              {it.name}
             </div>
+            <Row
+              left={
+                <span style={{ fontSize: `${FONT_SMALL}px` }}>
+                  {it.quantity} × {fmtEUR(it.unit_price)}{" "}
+                  <span style={{ color: "#666" }}>({it.vat_rate}%)</span>
+                </span>
+              }
+              right={<span style={{ fontWeight: 700 }}>{fmtEUR(it.total)}</span>}
+            />
           </div>
         ))}
       </div>
+
+      <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+
+      {/* === Totals === */}
+      <Row left={lang === "de" ? "Netto" : "الصافي"} right={fmtEUR(inv.net_total ?? inv.subtotal)} />
+      {(inv.vat_breakdown || []).map((b) => (
+        <Row key={b.rate} left={`MwSt ${b.rate}%`} right={fmtEUR(b.vat)} />
+      ))}
+      {inv.discount > 0 && (
+        <Row left={lang === "de" ? "Rabatt" : "خصم"} right={`-${fmtEUR(inv.discount)}`} />
+      )}
+      <div style={{ borderTop: "2px solid #000", margin: "4px 0" }} />
+      <Row left={lang === "de" ? "GESAMT" : "الإجمالي"} right={fmtEUR(inv.total)} total />
 
       <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }} />
 
-      {/* Totals */}
-      <div style={{ fontSize: "20px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>{lang === "de" ? "Netto" : "الصافي"}</span>
-          <span>{fmtEUR(inv.net_total ?? inv.subtotal)}</span>
-        </div>
-        {(inv.vat_breakdown || []).map((b) => (
-          <div
-            key={b.rate}
-            style={{ display: "flex", justifyContent: "space-between" }}
-          >
-            <span>MwSt {b.rate}%</span>
-            <span>{fmtEUR(b.vat)}</span>
-          </div>
-        ))}
-        {inv.discount > 0 && (
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span>{lang === "de" ? "Rabatt" : "خصم"}</span>
-            <span>-{fmtEUR(inv.discount)}</span>
-          </div>
-        )}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            marginTop: "6px",
-            paddingTop: "6px",
-            borderTop: "2px solid #000",
-            fontSize: "26px",
-            fontWeight: 800,
-          }}
-        >
-          <span>{lang === "de" ? "GESAMT" : "الإجمالي"}</span>
-          <span>{fmtEUR(inv.total)}</span>
-        </div>
-      </div>
-
-      <div style={{ borderTop: "1px dashed #000", margin: "10px 0" }} />
-
-      {/* TSE block */}
+      {/* === TSE block === */}
       {inv.tse_status === "signed" && (
-        <div style={{ textAlign: "center", marginBottom: "8px" }}>
+        <div style={{ textAlign: "center", marginBottom: "6px" }}>
           {inv.tse_qr_code && (
             <div
               style={{
                 background: "#fff",
-                padding: "4px",
+                padding: "2px",
                 display: "inline-block",
-                marginBottom: "6px",
+                marginBottom: "4px",
               }}
             >
               <QRCodeCanvas
                 value={inv.tse_qr_code}
-                size={140}
+                size={printerMm === 58 ? 100 : 130}
                 includeMargin={false}
               />
             </div>
           )}
-          <div style={{ fontSize: "18px", fontWeight: 700, color: "#0a7d33" }}>
+          <div style={{ fontSize: `${FONT_SMALL}px`, fontWeight: 700, color: "#0a7d33" }}>
             ✓ TSE-signiert (KassenSichV)
           </div>
           {inv.tse_serial && (
-            <div style={{ fontSize: "14px", fontFamily: "monospace", wordBreak: "break-all" }}>
+            <div
+              style={{
+                fontSize: "10px",
+                fontFamily: "monospace",
+                wordBreak: "break-all",
+                lineHeight: 1.2,
+              }}
+            >
               Serial: {inv.tse_serial}
             </div>
           )}
           {inv.tse_counter != null && (
-            <div style={{ fontSize: "14px", fontFamily: "monospace" }}>
+            <div style={{ fontSize: "10px", fontFamily: "monospace" }}>
               Sig-Zähler: {inv.tse_counter}
             </div>
           )}
           {inv.tse_timestamp && (
-            <div style={{ fontSize: "14px", fontFamily: "monospace" }}>
+            <div style={{ fontSize: "10px", fontFamily: "monospace" }}>
               {new Date(inv.tse_timestamp).toLocaleString(
                 lang === "de" ? "de-DE" : "ar-EG",
               )}
@@ -234,11 +273,11 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
         </div>
       )}
 
-      <div style={{ textAlign: "center", fontSize: "18px", color: "#444", marginTop: "8px" }}>
+      <div style={{ textAlign: "center", fontSize: `${FONT_SMALL}px`, color: "#444", marginTop: "6px" }}>
         {settings.receipt_footer ||
           (lang === "de" ? "Vielen Dank für Ihren Besuch" : "شكراً لزيارتكم")}
       </div>
-      <div style={{ textAlign: "center", fontSize: "14px", color: "#888", marginTop: "10px" }}>
+      <div style={{ textAlign: "center", fontSize: "10px", color: "#888", marginTop: "8px" }}>
         Bahaa Nasser
       </div>
     </div>
