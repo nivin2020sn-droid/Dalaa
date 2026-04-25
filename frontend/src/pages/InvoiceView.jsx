@@ -480,7 +480,7 @@ export default function InvoiceView() {
         settings={settings}
         lang={lang}
         dir={dir}
-        printerMm={80}
+        widthMm={80}
       />
       <InvoiceReceipt
         ref={receipt58Ref}
@@ -488,7 +488,7 @@ export default function InvoiceView() {
         settings={settings}
         lang={lang}
         dir={dir}
-        printerMm={58}
+        widthMm={58}
       />
     </div>
   );

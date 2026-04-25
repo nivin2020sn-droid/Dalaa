@@ -3,23 +3,15 @@ import { fmtEUR, fmtDate } from "../api";
 import { QRCodeCanvas } from "qrcode.react";
 
 /**
- * 80mm / 58mm thermal-receipt template.
+ * Thermal-receipt layout for an invoice (58mm or 80mm rolls).
  *
- * 100% INDEPENDENT from the A4 invoice card. NO shadcn <Card>, NO Tailwind
- * classes that could leak shared styles. Pure inline styles.
+ * Designed to be rendered hidden off-screen, captured by html2canvas, and
+ * embedded into a narrow jsPDF page. The DOM is drawn at a fixed pixel
+ * width so the PDF target width (in mm) is just a scaling factor.
  *
- * Layout strategy (anti-overflow):
- *   - Root width is fixed in CSS pixels at 4× the printable mm
- *     (72mm → 288px;  50mm → 200px). PDF page = 72mm/50mm exactly with
- *     margin 0, so the bitmap never gets clipped by the printer.
- *   - Container `direction: ltr` ALWAYS — the layout grid is LTR.
- *     Arabic strings inside are wrapped in `<Bidi dir="rtl">` so glyph
- *     shaping works without flipping the column order.
- *   - Two-column rows use FLOATS (label: float left, value: float right)
- *     wrapped in an `overflow: hidden` clearfix div — this CANNOT push
- *     content out of the box the way flex/table-cell can on long strings.
- *   - Both label and value have `max-width: 50%` and `overflow: hidden`
- *     so a runaway long token (TSE serial) is truncated, never overflows.
+ * Width reference (96dpi):
+ *   58mm ≈ 219px      (printable area ≈ 48mm)
+ *   80mm ≈ 302px      (printable area ≈ 72mm)
  */
 const payLabels = {
   cash: { ar: "نقداً", de: "Bar" },
@@ -27,172 +19,73 @@ const payLabels = {
   transfer: { ar: "تحويل", de: "Überweisung" },
 };
 
-// Bidi-isolated text wrapper. Use for any string that can be Arabic so
-// glyphs shape correctly inside the LTR-rooted receipt container.
-const Bidi = ({ children, lang }) => (
-  <span
-    dir={lang === "ar" ? "rtl" : "ltr"}
-    style={{ unicodeBidi: "isolate" }}
-  >
-    {children}
-  </span>
-);
-
-// Two-column row using floats + clearfix. label left, value right.
-function Row({ left, right, fontSize = 11, bold = false, total = false }) {
-  const fs = total ? 14 : fontSize;
-  const fw = total ? 800 : bold ? 700 : 400;
-  return (
-    <div style={{ overflow: "hidden", margin: "1px 0", lineHeight: 1.3 }}>
-      <span
-        style={{
-          float: "left",
-          maxWidth: "55%",
-          overflow: "hidden",
-          whiteSpace: "nowrap",
-          textOverflow: "ellipsis",
-          fontSize: `${fs}px`,
-          fontWeight: fw,
-        }}
-      >
-        {left}
-      </span>
-      <span
-        style={{
-          float: "right",
-          maxWidth: "55%",
-          overflow: "hidden",
-          whiteSpace: "nowrap",
-          textOverflow: "ellipsis",
-          fontSize: `${fs}px`,
-          fontWeight: fw,
-          fontFamily: "monospace",
-          unicodeBidi: "plaintext",
-        }}
-      >
-        {right}
-      </span>
-    </div>
-  );
-}
-
-// Stacked item: name on its own line, then "qty × price (vat%)" left and
-// total right via a Row.
-function ItemRow({ it, lang }) {
-  return (
-    <div style={{ marginBottom: "3px" }}>
-      <div
-        style={{
-          fontWeight: 700,
-          fontSize: "11px",
-          lineHeight: 1.25,
-          wordBreak: "break-word",
-          textAlign: lang === "ar" ? "right" : "left",
-        }}
-      >
-        <Bidi lang={lang}>{it.name}</Bidi>
-      </div>
-      <Row
-        fontSize={10}
-        left={
-          <span style={{ color: "#444" }}>
-            {it.quantity} × {fmtEUR(it.unit_price)} ({it.vat_rate}%)
-          </span>
-        }
-        right={fmtEUR(it.total)}
-        bold
-      />
-    </div>
-  );
-}
-
 const InvoiceReceipt = forwardRef(function InvoiceReceipt(
-  { inv, settings, lang, printerMm = 80 },
+  { inv, settings, lang, dir, widthMm = 80 },
   ref,
 ) {
   if (!inv) return null;
 
-  // 1px = 0.25mm  →  72mm = 288px ;  50mm = 200px.
-  const W = printerMm === 58 ? 200 : 288;
+  // Render at ~3x the physical width in pixels for a crisp 200dpi-ish capture.
+  // jsPDF will scale the resulting bitmap down to widthMm.
+  const renderWidthPx = Math.round(widthMm * 3.78 * 2.4); // ≈ 725px @ 80mm
   const isReversal = inv.status === "reversal";
   const pay = payLabels[inv.payment_method]?.[lang] || inv.payment_method;
-  const QR_PX = printerMm === 58 ? 100 : 130;
 
   return (
     <div
       ref={ref}
       data-testid="invoice-receipt-render"
       style={{
-        // On-screen but invisible — html2canvas captures fine, user never
-        // sees it. NOT moved off-page — some webviews skip rendering far
-        // off-screen elements which breaks the capture.
         position: "fixed",
-        top: "0px",
-        left: "0px",
-        zIndex: -9999,
-        opacity: 0,
-        pointerEvents: "none",
-        // Fixed pixel width matching the PDF printable area.
-        width: `${W}px`,
-        boxSizing: "border-box",
-        padding: "8px",
-        // FORCED LTR — Arabic text uses <Bidi> spans inside.
-        direction: "ltr",
-        textAlign: "left",
+        top: "-10000px",
+        left: "-10000px",
+        width: `${renderWidthPx}px`,
         background: "#ffffff",
         color: "#000000",
         fontFamily:
-          "'Cairo', 'Tajawal', 'Inter', Arial, system-ui, sans-serif",
-        fontSize: "11px",
-        lineHeight: 1.3,
-        // Hard guard: anything that tries to leave the box is clipped
-        // (we still try to make sure nothing overflows in the first place).
-        overflow: "hidden",
-        wordBreak: "break-word",
+          "'Inter', 'Cairo', 'Tajawal', system-ui, -apple-system, Segoe UI, sans-serif",
+        padding: "16px",
+        direction: dir,
+        fontSize: "22px",
+        lineHeight: "1.35",
+        boxSizing: "border-box",
       }}
     >
-      {/* ============ Header (centered) ============ */}
-      <div style={{ textAlign: "center", marginBottom: "4px" }}>
+      {/* Header */}
+      <div style={{ textAlign: "center", marginBottom: "10px" }}>
         {settings.logo_url && (
           <img
             src={settings.logo_url}
             alt=""
             style={{
-              width: "44px",
-              height: "44px",
+              width: "72px",
+              height: "72px",
               objectFit: "cover",
-              borderRadius: "4px",
-              display: "block",
-              margin: "0 auto 2px",
+              borderRadius: "8px",
+              margin: "0 auto 6px",
             }}
           />
         )}
-        <div style={{ fontSize: "14px", fontWeight: 800, lineHeight: 1.15 }}>
-          <Bidi lang={lang}>{settings.shop_name}</Bidi>
-        </div>
+        <div style={{ fontSize: "30px", fontWeight: 800 }}>{settings.shop_name}</div>
         {settings.tagline && (
-          <div style={{ fontSize: "10px", color: "#444" }}>
-            <Bidi lang={lang}>{settings.tagline}</Bidi>
-          </div>
+          <div style={{ fontSize: "20px", color: "#444" }}>{settings.tagline}</div>
         )}
         {settings.address && (
-          <div style={{ fontSize: "10px", color: "#444" }}>
-            <Bidi lang={lang}>{settings.address}</Bidi>
-          </div>
+          <div style={{ fontSize: "18px", color: "#444" }}>{settings.address}</div>
         )}
         {settings.phone && (
-          <div style={{ fontSize: "10px", color: "#444" }}>
+          <div style={{ fontSize: "18px", color: "#444" }}>
             {lang === "de" ? "Tel" : "هاتف"}: {settings.phone}
           </div>
         )}
         {settings.tax_id && (
-          <div style={{ fontSize: "10px", color: "#444" }}>
+          <div style={{ fontSize: "18px", color: "#444" }}>
             {lang === "de" ? "USt-IdNr." : "الرقم الضريبي"}: {settings.tax_id}
           </div>
         )}
       </div>
 
-      <div style={{ borderTop: "1px dashed #000", margin: "4px 0" }} />
+      <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }} />
 
       {isReversal && (
         <div
@@ -200,124 +93,139 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
             textAlign: "center",
             background: "#fff5e6",
             border: "1px solid #f5b54a",
-            padding: "3px",
-            marginBottom: "4px",
+            padding: "6px",
+            marginBottom: "8px",
             fontWeight: 800,
-            fontSize: "11px",
           }}
         >
           {lang === "de" ? "STORNORECHNUNG" : "فاتورة إلغاء"}
-          <div style={{ fontSize: "10px", fontWeight: 600 }}>
+          <div style={{ fontSize: "18px", fontWeight: 600 }}>
             ⟵ {inv.storno_of_number}
           </div>
         </div>
       )}
 
-      {/* ============ Meta block ============ */}
-      <Row
-        left={<Bidi lang={lang}>{lang === "de" ? "Beleg-Nr." : "رقم الفاتورة"}</Bidi>}
-        right={inv.invoice_number}
-        bold
-      />
-      <Row
-        left={<Bidi lang={lang}>{lang === "de" ? "Datum" : "التاريخ"}</Bidi>}
-        right={fmtDate(inv.created_at, lang)}
-      />
-      <Row
-        left={<Bidi lang={lang}>{lang === "de" ? "Kunde" : "العميل"}</Bidi>}
-        right={<Bidi lang={lang}>{inv.customer_name}</Bidi>}
-      />
-      <Row
-        left={<Bidi lang={lang}>{lang === "de" ? "Kassierer" : "الكاشير"}</Bidi>}
-        right={<Bidi lang={lang}>{inv.cashier_name}</Bidi>}
-      />
-      <Row
-        left={<Bidi lang={lang}>{lang === "de" ? "Zahlung" : "الدفع"}</Bidi>}
-        right={<Bidi lang={lang}>{pay}</Bidi>}
-      />
+      {/* Meta */}
+      <div style={{ fontSize: "20px", marginBottom: "8px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span>{lang === "de" ? "Beleg-Nr." : "رقم الفاتورة"}</span>
+          <span style={{ fontFamily: "monospace", fontWeight: 700 }}>
+            {inv.invoice_number}
+          </span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span>{lang === "de" ? "Datum" : "التاريخ"}</span>
+          <span>{fmtDate(inv.created_at, lang)}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span>{lang === "de" ? "Kunde" : "العميل"}</span>
+          <span>{inv.customer_name}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span>{lang === "de" ? "Kassierer" : "الكاشير"}</span>
+          <span>{inv.cashier_name}</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span>{lang === "de" ? "Zahlung" : "الدفع"}</span>
+          <span>{pay}</span>
+        </div>
+      </div>
 
-      <div style={{ borderTop: "1px dashed #000", margin: "4px 0" }} />
+      <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }} />
 
-      {/* ============ Items ============ */}
-      <div>
+      {/* Items */}
+      <div style={{ fontSize: "20px" }}>
         {(inv.items || []).map((it, i) => (
-          <ItemRow key={i} it={it} lang={lang} />
+          <div key={i} style={{ marginBottom: "6px" }}>
+            <div style={{ fontWeight: 700 }}>{it.name}</div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>
+                {it.quantity} × {fmtEUR(it.unit_price)}{" "}
+                <span style={{ color: "#666", fontSize: "16px" }}>
+                  ({it.vat_rate}%)
+                </span>
+              </span>
+              <span style={{ fontWeight: 700 }}>{fmtEUR(it.total)}</span>
+            </div>
+          </div>
         ))}
       </div>
 
-      <div style={{ borderTop: "1px dashed #000", margin: "4px 0" }} />
+      <div style={{ borderTop: "1px dashed #000", margin: "8px 0" }} />
 
-      {/* ============ Totals ============ */}
-      <Row
-        left={<Bidi lang={lang}>{lang === "de" ? "Netto" : "الصافي"}</Bidi>}
-        right={fmtEUR(inv.net_total ?? inv.subtotal)}
-      />
-      {(inv.vat_breakdown || []).map((b) => (
-        <Row key={b.rate} left={`MwSt ${b.rate}%`} right={fmtEUR(b.vat)} />
-      ))}
-      {inv.discount > 0 && (
-        <Row
-          left={<Bidi lang={lang}>{lang === "de" ? "Rabatt" : "خصم"}</Bidi>}
-          right={`-${fmtEUR(inv.discount)}`}
-        />
-      )}
-      <div style={{ borderTop: "2px solid #000", margin: "3px 0" }} />
-      <Row
-        left={<Bidi lang={lang}>{lang === "de" ? "GESAMT" : "الإجمالي"}</Bidi>}
-        right={fmtEUR(inv.total)}
-        total
-      />
+      {/* Totals */}
+      <div style={{ fontSize: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span>{lang === "de" ? "Netto" : "الصافي"}</span>
+          <span>{fmtEUR(inv.net_total ?? inv.subtotal)}</span>
+        </div>
+        {(inv.vat_breakdown || []).map((b) => (
+          <div
+            key={b.rate}
+            style={{ display: "flex", justifyContent: "space-between" }}
+          >
+            <span>MwSt {b.rate}%</span>
+            <span>{fmtEUR(b.vat)}</span>
+          </div>
+        ))}
+        {inv.discount > 0 && (
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span>{lang === "de" ? "Rabatt" : "خصم"}</span>
+            <span>-{fmtEUR(inv.discount)}</span>
+          </div>
+        )}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            marginTop: "6px",
+            paddingTop: "6px",
+            borderTop: "2px solid #000",
+            fontSize: "26px",
+            fontWeight: 800,
+          }}
+        >
+          <span>{lang === "de" ? "GESAMT" : "الإجمالي"}</span>
+          <span>{fmtEUR(inv.total)}</span>
+        </div>
+      </div>
 
-      <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+      <div style={{ borderTop: "1px dashed #000", margin: "10px 0" }} />
 
-      {/* ============ TSE / KassenSichV ============ */}
+      {/* TSE block */}
       {inv.tse_status === "signed" && (
-        <div style={{ textAlign: "center", marginBottom: "4px" }}>
+        <div style={{ textAlign: "center", marginBottom: "8px" }}>
           {inv.tse_qr_code && (
             <div
               style={{
                 background: "#fff",
-                padding: "2px",
+                padding: "4px",
                 display: "inline-block",
-                marginBottom: "3px",
+                marginBottom: "6px",
               }}
             >
               <QRCodeCanvas
                 value={inv.tse_qr_code}
-                size={QR_PX}
+                size={140}
                 includeMargin={false}
               />
             </div>
           )}
-          <div
-            style={{
-              fontSize: "10px",
-              fontWeight: 700,
-              color: "#0a7d33",
-            }}
-          >
+          <div style={{ fontSize: "18px", fontWeight: 700, color: "#0a7d33" }}>
             ✓ TSE-signiert (KassenSichV)
           </div>
           {inv.tse_serial && (
-            <div
-              style={{
-                fontSize: "8px",
-                fontFamily: "monospace",
-                wordBreak: "break-all",
-                lineHeight: 1.15,
-                padding: "0 2px",
-              }}
-            >
+            <div style={{ fontSize: "14px", fontFamily: "monospace", wordBreak: "break-all" }}>
               Serial: {inv.tse_serial}
             </div>
           )}
           {inv.tse_counter != null && (
-            <div style={{ fontSize: "8px", fontFamily: "monospace" }}>
+            <div style={{ fontSize: "14px", fontFamily: "monospace" }}>
               Sig-Zähler: {inv.tse_counter}
             </div>
           )}
           {inv.tse_timestamp && (
-            <div style={{ fontSize: "8px", fontFamily: "monospace" }}>
+            <div style={{ fontSize: "14px", fontFamily: "monospace" }}>
               {new Date(inv.tse_timestamp).toLocaleString(
                 lang === "de" ? "de-DE" : "ar-EG",
               )}
@@ -326,27 +234,11 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
         </div>
       )}
 
-      <div
-        style={{
-          textAlign: "center",
-          fontSize: "10px",
-          color: "#444",
-          marginTop: "4px",
-        }}
-      >
-        <Bidi lang={lang}>
-          {settings.receipt_footer ||
-            (lang === "de" ? "Vielen Dank für Ihren Besuch" : "شكراً لزيارتكم")}
-        </Bidi>
+      <div style={{ textAlign: "center", fontSize: "18px", color: "#444", marginTop: "8px" }}>
+        {settings.receipt_footer ||
+          (lang === "de" ? "Vielen Dank für Ihren Besuch" : "شكراً لزيارتكم")}
       </div>
-      <div
-        style={{
-          textAlign: "center",
-          fontSize: "8px",
-          color: "#888",
-          marginTop: "6px",
-        }}
-      >
+      <div style={{ textAlign: "center", fontSize: "14px", color: "#888", marginTop: "10px" }}>
         Bahaa Nasser
       </div>
     </div>

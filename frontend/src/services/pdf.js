@@ -202,72 +202,43 @@ export async function shareInvoiceByEmail(domNode, filename, recipientEmail, sub
 }
 
 /**
- * Generate a thermal-receipt PDF from a hidden DOM node styled as a receipt.
+ * Generate a thermal-receipt PDF (58mm or 80mm wide rolls) from a hidden DOM
+ * node styled as a receipt. Uses the DOM node's natural pixel width so
+ * Arabic / German text renders via the browser font stack.
  *
- * `printerMm` is the ROLL width (80 or 58). The PDF page is sized to the
- * actual PRINTABLE area on those rolls (72mm for 80mm rolls, 50mm for 58mm
- * rolls), with NO outer margin so nothing gets clipped by the printer's
- * non-printable border.
- *
- * The receipt template renders ON-SCREEN (top:0, left:0) with `opacity:0`
- * so html2canvas always sees real layout dimensions. The cloned node has
- * its opacity restored to 1 inside `onclone` so the bitmap is opaque.
+ * On Android (Capacitor): saves to Cache and opens the share sheet.
+ * On Web: triggers a browser download.
  */
-export async function exportReceiptToPdf(domNode, filename, printerMm = 80) {
+export async function exportReceiptToPdf(domNode, filename, widthMm = 80) {
   if (!domNode) throw new Error("Receipt DOM node not found");
 
-  // Roll → printable area mapping. These widths avoid right-edge clipping
-  // on typical POS-58 / POS-80 thermal printers.
-  const PAGE_MM = printerMm === 58 ? 50 : 72;
-
-  // Capture exactly the receipt's intrinsic box. Don't trust the document
-  // viewport — the receipt sets its own width via inline CSS.
-  const renderWidth = domNode.offsetWidth;
-  const renderHeight = domNode.offsetHeight;
-  if (!renderWidth || !renderHeight) {
-    throw new Error("Receipt template not laid out yet");
-  }
-
   const canvas = await html2canvas(domNode, {
-    scale: 3, // crisp output for the small width
+    scale: 2,
     useCORS: true,
     backgroundColor: "#ffffff",
     logging: false,
-    width: renderWidth,
-    height: renderHeight,
-    windowWidth: renderWidth,
-    windowHeight: renderHeight,
-    foreignObjectRendering: false,
-    removeContainer: true,
-    // Restore opacity on the clone so the PNG is opaque, not transparent.
-    onclone: (doc, clonedNode) => {
-      try {
-        clonedNode.style.opacity = "1";
-        clonedNode.style.position = "static";
-        clonedNode.style.top = "auto";
-        clonedNode.style.left = "auto";
-        clonedNode.style.zIndex = "auto";
-      } catch {
-        /* ignore */
-      }
-    },
+    windowWidth: domNode.scrollWidth,
+    windowHeight: domNode.scrollHeight,
   });
   const imgData = canvas.toDataURL("image/png");
 
-  // PDF page = exactly the printable area; height auto-derived from aspect.
+  // Page width = roll width; page height = scaled image height + small padding.
+  const pageWidth = widthMm;
   const aspect = canvas.height / canvas.width;
-  const pageHeight = Math.max(40, PAGE_MM * aspect);
+  const pageHeight = Math.max(60, pageWidth * aspect + 6);
 
   const pdf = new jsPDF({
     unit: "mm",
-    format: [PAGE_MM, pageHeight],
+    format: [pageWidth, pageHeight],
     orientation: "portrait",
   });
 
-  // No margin — the receipt template already has internal padding.
-  pdf.addImage(imgData, "PNG", 0, 0, PAGE_MM, pageHeight);
+  const margin = 2;
+  const usableWidth = pageWidth - margin * 2;
+  const imgHeight = usableWidth * aspect;
+  pdf.addImage(imgData, "PNG", margin, margin, usableWidth, imgHeight);
 
-  const safeFilename = (filename || "receipt") + `_${printerMm}mm.pdf`;
+  const safeFilename = (filename || "receipt") + `_${widthMm}mm.pdf`;
 
   if (Capacitor.isNativePlatform()) {
     const base64 = pdf.output("datauristring").split(",")[1];
