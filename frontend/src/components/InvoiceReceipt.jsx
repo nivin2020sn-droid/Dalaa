@@ -1,6 +1,5 @@
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef } from "react";
 import { fmtEUR, fmtDate } from "../api";
-import QRCode from "qrcode";
 
 /**
  * Thermal-receipt layout for an invoice (58mm or 80mm rolls).
@@ -23,27 +22,6 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
   { inv, settings, lang, dir, widthMm = 80 },
   ref,
 ) {
-  const [qrDataUrl, setQrDataUrl] = useState("");
-
-  // Pre-render the TSE QR as a PNG data URL. Using an <img> with a data URL
-  // is the most reliable way to ensure html2canvas captures the QR correctly
-  // — far more reliable than <canvas> or <svg>, which may fail in Capacitor
-  // Android WebView during the html2canvas snapshot.
-  useEffect(() => {
-    let cancelled = false;
-    const code = inv?.tse_qr_code;
-    if (!code) { setQrDataUrl(""); return; }
-    QRCode.toDataURL(code, {
-      errorCorrectionLevel: "M",
-      margin: 1,
-      width: 360, // generated bitmap; we display at 140 CSS px → crisp on print
-      color: { dark: "#000000", light: "#ffffff" },
-    })
-      .then((url) => { if (!cancelled) setQrDataUrl(url); })
-      .catch(() => { if (!cancelled) setQrDataUrl(""); });
-    return () => { cancelled = true; };
-  }, [inv?.tse_qr_code]);
-
   if (!inv) return null;
 
   // Render at ~3x the physical width in pixels for a crisp 200dpi-ish capture.
@@ -218,23 +196,21 @@ const InvoiceReceipt = forwardRef(function InvoiceReceipt(
       {/* TSE block */}
       {inv.tse_status === "signed" && (
         <div style={{ textAlign: "center", marginBottom: "8px" }}>
-          {qrDataUrl && (
+          {/* QR placeholder — pdf.js injects the real PNG <img> here right
+              before the html2canvas snapshot, so the QR is guaranteed to
+              be rendered in the captured bitmap (works on Android WebView). */}
+          {inv.tse_qr_code && (
             <div
+              data-qr-placeholder
               style={{
                 background: "#fff",
                 padding: "4px",
                 display: "inline-block",
                 marginBottom: "6px",
+                width: "148px",
+                height: "148px",
               }}
-            >
-              <img
-                src={qrDataUrl}
-                alt="TSE QR"
-                width={140}
-                height={140}
-                style={{ display: "block", width: "140px", height: "140px" }}
-              />
-            </div>
+            />
           )}
           <div style={{ fontSize: "18px", fontWeight: 700, color: "#0a7d33" }}>
             ✓ TSE-signiert (KassenSichV)
