@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import QRCode from "qrcode";
 import { Capacitor } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
@@ -32,7 +33,8 @@ export async function exportInvoiceToPdf(domNode, filename) {
 
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 8;
+  // Tight margin so the invoice uses the full A4 width better.
+  const margin = 4;
   const usableWidth = pageWidth - margin * 2;
   const usableHeight = pageHeight - margin * 2;
 
@@ -237,13 +239,50 @@ async function waitForImages(node, timeoutMs = 3000) {
  * node styled as a receipt. Uses the DOM node's natural pixel width so
  * Arabic / German text renders via the browser font stack.
  *
+ * `tseQrCode` is the TSE QR payload string — when provided, this function
+ * generates a PNG data-URL and INJECTS it into a `<div data-qr-placeholder>`
+ * element inside the live DOM right before html2canvas takes the snapshot.
+ * This avoids any React-state timing issues (the QR is guaranteed to be a
+ * fully-decoded `<img>` element at capture time, even on Android WebView).
+ *
  * On Android (Capacitor): saves to Cache and opens the share sheet.
  * On Web: triggers a browser download.
  */
-export async function exportReceiptToPdf(domNode, filename, widthMm = 80) {
+export async function exportReceiptToPdf(domNode, filename, widthMm = 80, tseQrCode = "") {
   if (!domNode) throw new Error("Receipt DOM node not found");
 
-  // Wait for the TSE QR <img> (data-URL) to finish decoding before snapshot.
+  // ---- 1. Inject TSE QR as a fresh <img> just before snapshot ----------
+  if (tseQrCode) {
+    try {
+      const qrPng = await QRCode.toDataURL(tseQrCode, {
+        errorCorrectionLevel: "M",
+        margin: 1,
+        width: 360,
+        color: { dark: "#000000", light: "#ffffff" },
+      });
+      const placeholder = domNode.querySelector("[data-qr-placeholder]");
+      if (placeholder) {
+        // Build the <img> directly in the DOM (no JSX / state) — guaranteed
+        // to be present and decoded before we call html2canvas.
+        const img = new Image();
+        img.src = qrPng;
+        img.width = 140;
+        img.height = 140;
+        img.alt = "TSE QR";
+        img.style.cssText = "display:block;width:140px;height:140px";
+        placeholder.innerHTML = "";
+        placeholder.appendChild(img);
+        // Force decode so the bitmap is in the renderer cache.
+        if (img.decode) {
+          try { await img.decode(); } catch { /* ignore */ }
+        }
+      }
+    } catch (e) {
+      console.warn("QR generation failed:", e);
+    }
+  }
+
+  // Wait for ALL <img> elements (logo + QR) to be fully decoded.
   await waitForImages(domNode);
 
   const canvas = await html2canvas(domNode, {

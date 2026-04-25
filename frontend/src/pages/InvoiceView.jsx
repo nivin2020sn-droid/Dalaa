@@ -90,7 +90,9 @@ export default function InvoiceView() {
     if (!node) return;
     setBusy(true);
     try {
-      await exportReceiptToPdf(node, inv.invoice_number, widthMm);
+      // Pass the TSE QR payload so pdf.js can inject it as an <img> right
+      // before the html2canvas snapshot — guarantees the QR is captured.
+      await exportReceiptToPdf(node, inv.invoice_number, widthMm, inv.tse_qr_code || "");
       toast.success(
         (lang === "de" ? "Beleg " : "إيصال ") + widthMm + "mm " + (lang === "de" ? "bereit" : "جاهز"),
       );
